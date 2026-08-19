@@ -1,0 +1,23 @@
+# Static analysis for the toolkit's Python, mirroring the shellcheck gate on
+# the shell scripts. The rule set is deliberately scoped to correctness and
+# likely-bug patterns rather than cosmetics:
+#
+#   F   pyflakes: undefined names, unused imports/variables, bad format strings
+#   E/W pycodestyle errors and warnings
+#   B   flake8-bugbear: mutable defaults, misuse of loop variables, etc.
+#   C4  flake8-comprehensions: correctness-adjacent comprehension cleanups
+#
+# Stylistic modernisation (UP) and import sorting (I) are intentionally left
+# out: several modules import a sibling after a deliberate sys.path insert
+# (carrying a '# noqa: E402'), and churning typing.List -> list across the
+# codebase buys nothing for a tool that must stay readable on a small screen.
+# The existing code already passes this set, so it locks the bar in place.
+target-version = "py39"
+line-length = 100
+
+[lint]
+select = ["E", "F", "W", "B", "C4"]
+
+# btmon field parsing leans on regexes and short locals; a few long lines in
+# tables and evidence strings are clearer left intact.
+ignore = ["E501"]

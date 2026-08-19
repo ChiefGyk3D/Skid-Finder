@@ -113,6 +113,8 @@ except OSError as exc:
   check_file "tests/test-le-scan-enable.sh"
   check_file "tests/test-config-parsing.sh"
   check_file "tests/make-fixture.py"
+  check_file "tests/test-detector-metrics.py"
+  check_file "tests/corpus/manifest.jsonl"
   check_file "tests/test-toolkit.sh"
 
   for script in \
@@ -135,6 +137,8 @@ except OSError as exc:
     check_shell_syntax "${script}"
   done
 
+  check_shell_syntax "tests/test-detector-metrics.py"
+
   if command -v python3 >/dev/null 2>&1; then
     record_pass "python3 available"
   else
@@ -155,6 +159,16 @@ except OSError as exc:
     fi
   else
     record_warn "shellcheck not installed; static analysis skipped"
+  fi
+
+  if command -v ruff >/dev/null 2>&1; then
+    if ruff check "${ROOT_DIR}"/scripts/*.py "${ROOT_DIR}"/tests/*.py >/dev/null 2>&1; then
+      record_pass "ruff clean (ruff.toml ruleset)"
+    else
+      record_warn "ruff findings in Python (run: ruff check scripts/*.py tests/*.py)"
+    fi
+  else
+    record_warn "ruff not installed; Python static analysis skipped"
   fi
 
   echo
