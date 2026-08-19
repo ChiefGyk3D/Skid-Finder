@@ -22,29 +22,31 @@ the same precision/recall harness the synthetic samples run through.
    sudo ./scripts/capture-btmon.sh
    ```
 
-2. Copy the text log here with a descriptive, dated name:
+2. Record it with the helper, which copies the log here and adds the manifest
+   line for you (no root needed):
 
    ```bash
-   cp logs/btmon-hci0-YYYYMMDD-HHMMSS.log \
-      tests/corpus/real/quiet-office-YYYYMMDD.log
+   latest=$(ls -1t logs/btmon-hci0-*.log | head -1)
+   ./scripts/add-corpus-sample.sh --label ambient --capture "$latest" \
+     --note "home baseline" --run
    ```
 
-3. Add a line to `tests/corpus/manifest.jsonl` labelling it:
+   `--run` re-runs the harness immediately. If a real ambient capture *does*
+   match, that is the signal to raise the threshold it tripped in
+   `config/signatures.conf` — the baselining step the README's roadmap calls
+   for.
 
-   ```json
-   {"kind":"real","label":"ambient","path":"real/quiet-office-YYYYMMDD.log"}
-   ```
+For a **spam** sample — a capture where you *know* spam was present, to measure
+recall on real traffic instead of only synthetic floods — use `--label spam`
+and tag the family it should trip:
 
-4. Run the harness and confirm the ambient sample produces no match:
+```bash
+./scripts/add-corpus-sample.sh --label spam --capture "$latest" \
+  --families flipper,fastpair --note "Flipper Zero, contained room" --run
+```
 
-   ```bash
-   python3 tests/test-detector-metrics.py
-   ```
+See [../../../docs/flipper-spam-capture.md](../../../docs/flipper-spam-capture.md)
+for the controlled Flipper Zero capture procedure.
 
-   If a real ambient capture *does* match, that is the signal to raise the
-   threshold it tripped in `config/signatures.conf` — this is exactly the
-   baselining step the README's roadmap calls for.
-
-Do the same with `"label":"spam"` for a capture where you *know* spam was
-present (e.g. a Flipper you were holding), to measure recall on real traffic
-rather than only on synthetic floods.
+The old manual path (copy the log, hand-edit `tests/corpus/manifest.jsonl`)
+still works; the helper just makes the labels and JSON hard to get wrong.

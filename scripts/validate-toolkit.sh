@@ -136,6 +136,7 @@ except OSError as exc:
     scripts/ble-field-run.sh \
     scripts/aio-feature-profile.sh \
     scripts/set-adapter-mode.sh \
+    scripts/add-corpus-sample.sh \
     scripts/troubleshoot-bluetooth.sh \
     scripts/diagnose-mediatek-ac1200.sh \
     scripts/validate-toolkit.sh; do

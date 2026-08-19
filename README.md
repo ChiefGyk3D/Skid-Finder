@@ -562,10 +562,14 @@ What now exists to close this:
   matches anything or spam recall drops. This is a regression guard, not just a
   report, and it runs in CI.
 - A committed slot for **your own real captures** under `tests/corpus/real/`
-  (git-ignored for privacy and size). Drop a quiet-ambient baseline there,
-  reference it in `tests/corpus/manifest.jsonl`, and the same harness measures
-  the detector against real quiet RF instead of only synthetic traffic. See
-  `tests/corpus/real/README.md`.
+  (git-ignored for privacy and size). Record one with
+  `scripts/add-corpus-sample.sh --label ambient --capture <log> --run` and the
+  same harness measures the detector against real quiet RF instead of only
+  synthetic traffic. See `tests/corpus/real/README.md`.
+- The recall side needs real hostile traffic, which a quiet baseline cannot
+  provide. To produce one safely, capture your own Flipper Zero's BLE spam in a
+  contained environment and record it with `--label spam`. See
+  [docs/flipper-spam-capture.md](docs/flipper-spam-capture.md).
 
 The remaining gap is the one only hardware can close: capturing that real quiet
 baseline. Until you have, the scanner still prints a stderr note whenever it
