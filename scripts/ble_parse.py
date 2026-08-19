@@ -21,7 +21,7 @@ Two details of real btmon output drive the design:
 
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, Iterator, List, Optional
 
 
 MAC_RE = re.compile(r"(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}")
@@ -121,127 +121,139 @@ class AdRecord:
         return self.addr_class == "public" or self.addr_type == "public"
 
 
-def _finish(record: Optional[AdRecord], out: List[AdRecord]) -> None:
-    if record is not None and record.address:
-        out.append(record)
+def iter_records(lines: Iterable[str]) -> Iterator[AdRecord]:
+    """Yield advertising records from an iterable of btmon text lines.
 
+    This is the streaming heart of the parser. It emits each record the moment
+    the block that follows it makes clear the record is complete, so it works
+    identically whether the lines come from a file read all at once or from a
+    live 'btmon' pipe delivered one line at a time. parse_records() is just this
+    generator drained into a list.
 
-def parse_records(path: str) -> List[AdRecord]:
-    """Parse a btmon text log into advertising records.
-
-    Only HCI advertising reports are returned. MGMT 'Device Found' echoes of
-    the same advertisement are skipped so events are not counted twice.
+    Only HCI advertising reports are yielded. MGMT 'Device Found' echoes of the
+    same advertisement are skipped so events are not counted twice.
     """
-    records: List[AdRecord] = []
     current: Optional[AdRecord] = None
     in_adv_block = False
     block_time: Optional[float] = None
 
-    with open(path, "r", encoding="utf-8", errors="ignore") as handle:
-        for raw in handle:
-            line = raw.rstrip("\n")
+    for raw in lines:
+        line = raw.rstrip("\n")
 
-            if BLOCK_RE.match(line):
-                # A new top-level event ends whatever came before.
-                _finish(current, records)
-                current = None
+        if BLOCK_RE.match(line):
+            # A new top-level event ends whatever came before.
+            if current is not None and current.address:
+                yield current
+            current = None
 
-                # Only HCI events carry advertising reports we want to count.
-                # '@' is the management channel, which duplicates them.
-                in_adv_block = line.startswith(">")
-                time_match = TIME_RE.search(line)
-                block_time = float(time_match.group(1)) if time_match else None
-                continue
+            # Only HCI events carry advertising reports we want to count.
+            # '@' is the management channel, which duplicates them.
+            in_adv_block = line.startswith(">")
+            time_match = TIME_RE.search(line)
+            block_time = float(time_match.group(1)) if time_match else None
+            continue
 
-            if not in_adv_block:
-                continue
+        if not in_adv_block:
+            continue
 
-            if ADV_REPORT_RE.search(line):
-                _finish(current, records)
-                current = None
-                continue
+        if ADV_REPORT_RE.search(line):
+            if current is not None and current.address:
+                yield current
+            current = None
+            continue
 
-            # 'Entry N' starts a new report inside a multi-report event.
-            if re.match(r"^\s*Entry \d+\s*$", line):
-                _finish(current, records)
-                current = AdRecord(timestamp=block_time)
-                continue
+        # 'Entry N' starts a new report inside a multi-report event.
+        if re.match(r"^\s*Entry \d+\s*$", line):
+            if current is not None and current.address:
+                yield current
+            current = AdRecord(timestamp=block_time)
+            continue
 
-            addr_match = ADDRESS_RE.match(line)
-            if addr_match:
-                # 'Direct address:' is the scan target, not the advertiser, and
-                # is excluded by the regex requiring 'Address:' with a capital A.
-                if current is None:
-                    current = AdRecord(timestamp=block_time)
-                if not current.address:
-                    current.address = addr_match.group(1).upper()
-                    current.addr_class = classify_address(addr_match.group(2))
-                continue
-
+        addr_match = ADDRESS_RE.match(line)
+        if addr_match:
+            # 'Direct address:' is the scan target, not the advertiser, and
+            # is excluded by the regex requiring 'Address:' with a capital A.
             if current is None:
-                continue
+                current = AdRecord(timestamp=block_time)
+            if not current.address:
+                current.address = addr_match.group(1).upper()
+                current.addr_class = classify_address(addr_match.group(2))
+            continue
 
-            type_match = ADDR_TYPE_RE.match(line)
-            if type_match:
-                current.addr_type = type_match.group(1).strip().lower()
-                continue
+        if current is None:
+            continue
 
-            rssi_match = RSSI_RE.match(line)
-            if rssi_match:
-                current.rssi = int(rssi_match.group(1))
-                continue
+        type_match = ADDR_TYPE_RE.match(line)
+        if type_match:
+            current.addr_type = type_match.group(1).strip().lower()
+            continue
 
-            tx_match = TXPOWER_RE.match(line)
-            if tx_match:
-                value = int(tx_match.group(1))
-                # 127 is the 'not available' sentinel in the LE spec.
-                current.tx_power = None if value == 127 else value
-                continue
+        rssi_match = RSSI_RE.match(line)
+        if rssi_match:
+            current.rssi = int(rssi_match.group(1))
+            continue
 
-            name_match = NAME_RE.match(line)
-            if name_match:
-                current.name = name_match.group(1).strip()
-                continue
+        tx_match = TXPOWER_RE.match(line)
+        if tx_match:
+            value = int(tx_match.group(1))
+            # 127 is the 'not available' sentinel in the LE spec.
+            current.tx_power = None if value == 127 else value
+            continue
 
-            company_match = COMPANY_RE.match(line)
-            if company_match:
-                current.companies.append(company_match.group(1).strip().lower())
-                continue
+        name_match = NAME_RE.match(line)
+        if name_match:
+            current.name = name_match.group(1).strip()
+            continue
 
-            manuf_match = MANUF_RE.match(line)
-            if manuf_match:
-                vendor = manuf_match.group(1).strip().lower()
-                if vendor:
-                    current.companies.append(vendor)
-                continue
+        company_match = COMPANY_RE.match(line)
+        if company_match:
+            current.companies.append(company_match.group(1).strip().lower())
+            continue
 
-            svc_match = SERVICE_DATA_RE.match(line)
-            if svc_match:
-                current.service_uuids.append(svc_match.group(1).lower())
-                continue
+        manuf_match = MANUF_RE.match(line)
+        if manuf_match:
+            vendor = manuf_match.group(1).strip().lower()
+            if vendor:
+                current.companies.append(vendor)
+            continue
 
-            if UUID_RE.match(line):
-                for uuid in UUID_VALUE_RE.findall(line):
-                    current.service_uuids.append(uuid.lower())
-                continue
+        svc_match = SERVICE_DATA_RE.match(line)
+        if svc_match:
+            current.service_uuids.append(svc_match.group(1).lower())
+            continue
 
-            flags_match = FLAGS_RE.match(line)
-            if flags_match:
-                current.flags = flags_match.group(1).lower()
-                continue
+        if UUID_RE.match(line):
+            for uuid in UUID_VALUE_RE.findall(line):
+                current.service_uuids.append(uuid.lower())
+            continue
 
-            len_match = DATA_LEN_RE.match(line)
-            if len_match:
-                current.data_length = int(len_match.group(1))
-                continue
+        flags_match = FLAGS_RE.match(line)
+        if flags_match:
+            current.flags = flags_match.group(1).lower()
+            continue
 
-            pdu_match = PDU_RE.match(line)
-            if pdu_match and not current.pdu_type:
-                current.pdu_type = pdu_match.group(1).strip()
-                continue
+        len_match = DATA_LEN_RE.match(line)
+        if len_match:
+            current.data_length = int(len_match.group(1))
+            continue
 
-    _finish(current, records)
-    return records
+        pdu_match = PDU_RE.match(line)
+        if pdu_match and not current.pdu_type:
+            current.pdu_type = pdu_match.group(1).strip()
+            continue
+
+    if current is not None and current.address:
+        yield current
+
+
+def parse_records(path: str) -> List[AdRecord]:
+    """Parse a btmon text log into a list of advertising records.
+
+    Thin wrapper over iter_records() so batch and streaming callers share one
+    parser and cannot disagree about what a capture contains.
+    """
+    with open(path, "r", encoding="utf-8", errors="ignore") as handle:
+        return list(iter_records(handle))
 
 
 def capture_duration(records: List[AdRecord]) -> float:

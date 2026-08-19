@@ -114,6 +114,7 @@ except OSError as exc:
   check_file "tests/test-config-parsing.sh"
   check_file "tests/make-fixture.py"
   check_file "tests/test-detector-metrics.py"
+  check_file "tests/test-ble-observe.sh"
   check_file "tests/corpus/manifest.jsonl"
   check_file "tests/test-toolkit.sh"
 
@@ -122,8 +123,12 @@ except OSError as exc:
     scripts/detect-hci.sh \
     scripts/setup-linux.sh \
     scripts/ble_parse.py \
+    scripts/ble_identity.py \
+    scripts/ble_signatures.py \
     scripts/ble-fingerprint.py \
     scripts/ble-signature-scan.py \
+    scripts/ble-observe.py \
+    scripts/ble-live-alert.py \
     scripts/ble-spam-watch.sh \
     scripts/capture-btmon.sh \
     scripts/foxhunt-rssi.sh \
