@@ -38,3 +38,4 @@
 # stays green without them. See tests/corpus/real/README.md.
 # {"kind":"real","label":"ambient","path":"real/quiet-office-20260820.log","note":"home baseline, no BLE spam present"}
 # {"kind":"real","label":"spam","path":"real/confirmed-flipper-20260808.log","note":"BSidesLV, Flipper observed in hand"}
+{"kind":"real","label":"ambient","path":"real/quiet-desktop-20260819.log","note":"desktop-nos internal Realtek, home RF"}
