@@ -107,8 +107,8 @@ Already running the AIO v2 support? Nothing to redo; carry straight on.
 Primary path (uConsole + AIO v2):
 
 ```bash
-git clone https://github.com/ChiefGyk3D/Uconsole-BLE-Stalker.git
-cd Uconsole-BLE-Stalker
+git clone https://github.com/ChiefGyk3D/Skid-Finder.git
+cd Skid-Finder
 sudo ./scripts/setup-pi.sh
 ```
 
