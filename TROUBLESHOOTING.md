@@ -13,7 +13,7 @@ Secondary support target:
 Run the automated report script:
 
 ```bash
-cd Uconsole-BLE-Stalker
+cd Skid-Finder
 chmod +x scripts/troubleshoot-bluetooth.sh
 ./scripts/troubleshoot-bluetooth.sh
 ```
