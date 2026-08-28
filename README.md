@@ -2,6 +2,8 @@
 
 Defensive BLE monitoring toolkit for conference environments (DEF CON, BSides). Skid Finder detects scripted BLE spam and flood tooling — the kind run by "skids" — and lets you foxhunt the source. It is optimized for the ClockworkPi uConsole but runs on other Linux devices too.
 
+Skid Finder started out focused on a single rig — the ClockworkPi uConsole paired with the HackerGadgets AIO v2 — and has since expanded to run on more hardware. The longer-term goal is to grow it into a distributed sensor net, with multiple cooperating nodes monitoring an environment together rather than a single hand-carried device.
+
 Primary configuration target:
 - uConsole with AIO v2
 
