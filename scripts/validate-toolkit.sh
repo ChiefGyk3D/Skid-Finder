@@ -94,7 +94,7 @@ except OSError as exc:
 }
 
 {
-  echo "uConsole BLE Toolkit Validation"
+  echo "Skid Finder Toolkit Validation"
   echo "generated_at=$(date -Is)"
   echo
 
