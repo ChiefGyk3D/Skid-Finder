@@ -20,7 +20,7 @@ mkdir -p "${ROOT_DIR}/logs"
 REPORT="${ROOT_DIR}/logs/troubleshoot-$(now_stamp).txt"
 
 {
-  echo "# uConsole BLE Toolkit Troubleshooting Report"
+  echo "# Skid Finder Toolkit Troubleshooting Report"
   echo "generated_at=$(date -Is)"
   echo "hostname=$(hostname)"
   echo "kernel=$(uname -a)"

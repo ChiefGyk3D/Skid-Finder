@@ -13,7 +13,7 @@ Secondary support target:
 Run the automated report script:
 
 ```bash
-cd uconsole-ble-foxhunt-toolkit
+cd Uconsole-BLE-Stalker
 chmod +x scripts/troubleshoot-bluetooth.sh
 ./scripts/troubleshoot-bluetooth.sh
 ```

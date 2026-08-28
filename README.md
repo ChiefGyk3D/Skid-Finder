@@ -1,6 +1,6 @@
-# uConsole BLE Spam Detector + Foxhunt Toolkit
+# Skid Finder
 
-Defensive BLE monitoring toolkit for conference environments (DEF CON, BSides) using ClockworkPi uConsole.
+Defensive BLE monitoring toolkit for conference environments (DEF CON, BSides). Skid Finder detects scripted BLE spam and flood tooling — the kind run by "skids" — and lets you foxhunt the source. It is optimized for the ClockworkPi uConsole but runs on other Linux devices too.
 
 Primary configuration target:
 - uConsole with AIO v2
@@ -483,7 +483,7 @@ tar -czf ~/field-archives/ble-$(date +%Y%m%d-%H%M%S).tgz logs/
 ```bash
 git init
 git add .
-git commit -m "Initial uConsole BLE spam detector and foxhunt toolkit"
+git commit -m "Initial Skid Finder BLE spam detector and foxhunt toolkit"
 ```
 
 ## Troubleshooting
