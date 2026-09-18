@@ -117,6 +117,8 @@ except OSError as exc:
   check_file "tests/test-config-parsing.sh"
   check_file "tests/test-field-menu.sh"
   check_file "tests/test-versioning.sh"
+  check_file "tests/test-sensor-net.sh"
+  check_file "tests/make-fleet-fixture.py"
   check_file "tests/make-fixture.py"
   check_file "tests/test-detector-metrics.py"
   check_file "tests/test-ble-observe.sh"
@@ -136,6 +138,9 @@ except OSError as exc:
     scripts/ble-observe.py \
     scripts/ble-live-alert.py \
     scripts/ble-live-watch.sh \
+    scripts/ble-publish.py \
+    scripts/ble-collector.py \
+    scripts/skid_conf.py \
     scripts/ble-spam-watch.sh \
     scripts/capture-btmon.sh \
     scripts/foxhunt-rssi.sh \
@@ -152,6 +157,7 @@ except OSError as exc:
   done
 
   check_shell_syntax "tests/test-detector-metrics.py"
+  check_shell_syntax "tests/make-fleet-fixture.py"
 
   if command -v python3 >/dev/null 2>&1; then
     record_pass "python3 available"

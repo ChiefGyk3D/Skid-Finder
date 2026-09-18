@@ -377,6 +377,25 @@ schema and how this becomes the foundation for a triangulating sensor net,
 and [docs/siem-ingestion.md](docs/siem-ingestion.md) for the `ble-alert/1`
 record the live watcher writes and how to ship both files to a SIEM.
 
+### 3d) Sensor net: several nodes, one collector
+
+Set `MQTT_HOST` (and the rest of the `MQTT_*` keys) in
+`config/interfaces.conf` and `ble-live-watch.sh` ships every observation and
+alert record to the broker as it is written, with a retained heartbeat. On
+the machine that watches the fleet:
+
+```bash
+./scripts/ble-collector.py --mqtt --state logs/fleet-state.json --alerts-out logs/fleet-alerts.jsonl
+```
+
+The collector merges devices across sensors by identity, judges every
+sensor's recent window with the same detector, and estimates where a
+`strong`/`session` device or a flood is, with the error bar stated. Nodes
+that cannot reach a broker drop files into a directory it watches instead
+(`--watch DIR`), and finished captures can be merged after the fact
+(`--input logs/obs-*.jsonl`). The node contract, including an ESP32
+reference sketch, is in [docs/sensor-nodes.md](docs/sensor-nodes.md).
+
 ### 4) Dual-pane session
 
 ```bash
@@ -650,20 +669,22 @@ wrong order, that is a bug worth reporting with the screen size.
 - Signature coverage targets common scripted spam. Custom payloads are not
   exhaustively covered.
 
-### Sensor net and triangulation (planned foundation in place)
+### Sensor net (alpha: collector and transport exist, unproven on real nodes)
 
-The normalized observation stream (`scripts/ble-observe.py`, schema
-`ble-obs/1`) and the live alerter (`scripts/ble-live-alert.py`) are the seam a
-multi-sensor net plugs into: several sensors emitting the same stamped records
-to a collector that groups by identity and estimates location.
+`scripts/ble-collector.py` merges records from several sensors over MQTT or
+a watched directory, judges each sensor with the shared detector, and
+estimates location as an RSSI-weighted centroid with its error stated. The
+publisher and collector are tested against a stand-in broker in CI; neither
+has been run against a real broker or a second physical node from this
+project yet, and the ESP32 reference sketch has not been compiled here.
 
 The honest caveat, recorded in [docs/sensor-net-notes.md](docs/sensor-net-notes.md):
 RSSI-based location indoors is coarse (multipath swings readings by 20 dB), and
-you can only triangulate an identity that persists across sensors — a `strong`
+you can only locate an identity that persists across sensors — a `strong`
 or `session` tier device, or a spam source that transmits continuously. A
 `model`/`ambiguous` tier target is a product, possibly several people, and
-triangulating it triangulates a crowd. The collector, transport, and location
-math are not yet implemented; the data model they need is.
+the collector refuses to place it on a map. Multilateration with a
+calibrated path-loss model is not implemented.
 
 ### SIEM and dashboards (records exist, pipeline untested)
 

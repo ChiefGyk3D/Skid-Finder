@@ -35,63 +35,19 @@ Examples:
 import argparse
 import json
 import os
-import re
 import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ble_parse  # noqa: E402
 from ble_identity import identity_key  # noqa: E402
+from skid_conf import read_conf, setting  # noqa: E402
 
 SCHEMA = "ble-obs/1"
 
-# Sensor identity settings read from config/interfaces.conf when neither the
-# command line nor the environment supplies them. The README tells operators
-# to set these in the config file, and every shell script parses that file
-# through lib.sh; this tool is Python, so it reads the same three keys itself
-# rather than silently defaulting to "unknown".
+# Sensor identity settings come from config/interfaces.conf when neither the
+# command line nor the environment supplies them, through the shared reader.
 CONF_KEYS = ("SENSOR_ID", "SENSOR_LAT", "SENSOR_LON")
-QUOTED_RE = re.compile(r"""^"([^"]*)"|^'([^']*)'""")
-
-
-def read_sensor_conf(path):
-    """Return {KEY: value} for the sensor keys in a KEY=value config file.
-
-    Mirrors lib.sh: the file is data, never executed; quoted values keep
-    their contents, unquoted values lose a trailing '# comment'.
-    """
-    found = {}
-    try:
-        with open(path, encoding="utf-8") as handle:
-            for raw in handle:
-                line = raw.strip()
-                if not line or line.startswith("#"):
-                    continue
-                key, sep, value = line.partition("=")
-                key = key.strip()
-                if not sep or key not in CONF_KEYS:
-                    continue
-                value = value.strip()
-                # Same rules as lib.sh: a quoted value keeps its contents and
-                # drops whatever follows the closing quote; an unquoted value
-                # is cut at the first '#'.
-                quoted = QUOTED_RE.match(value)
-                if quoted:
-                    value = quoted.group(1) or quoted.group(2) or ""
-                else:
-                    value = value.split("#", 1)[0].strip()
-                found[key] = value
-    except OSError:
-        pass
-    return found
-
-
-def sensor_default(name, conf):
-    """Precedence: environment, then config/interfaces.conf, then empty."""
-    value = os.environ.get(name)
-    if value is None or value == "":
-        value = conf.get(name, "")
-    return value
 
 
 def to_event(record, sensor_id, lat, lon, epoch_base):
@@ -171,9 +127,7 @@ def parse_epoch_base(value):
 
 
 def main() -> int:
-    conf_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                             "config", "interfaces.conf")
-    conf = read_sensor_conf(conf_path)
+    conf = read_conf(CONF_KEYS)
 
     parser = argparse.ArgumentParser(description="Emit normalized BLE observations as JSON Lines")
     src = parser.add_mutually_exclusive_group(required=True)
@@ -182,12 +136,12 @@ def main() -> int:
                      help="read btmon text from stdin and emit live")
     parser.add_argument("--out", default="-",
                         help="output JSONL path, or '-' for stdout (default)")
-    parser.add_argument("--sensor-id", default=sensor_default("SENSOR_ID", conf) or "unknown",
+    parser.add_argument("--sensor-id", default=setting("SENSOR_ID", conf, "unknown"),
                         help="identifier for this sensor (default: $SENSOR_ID, then "
                              "SENSOR_ID in config/interfaces.conf, then 'unknown')")
-    parser.add_argument("--sensor-lat", default=sensor_default("SENSOR_LAT", conf),
+    parser.add_argument("--sensor-lat", default=setting("SENSOR_LAT", conf),
                         help="sensor latitude in decimal degrees (stationary sensors)")
-    parser.add_argument("--sensor-lon", default=sensor_default("SENSOR_LON", conf),
+    parser.add_argument("--sensor-lon", default=setting("SENSOR_LON", conf),
                         help="sensor longitude in decimal degrees (stationary sensors)")
     parser.add_argument("--epoch-base", default=None,
                         help="wall-clock epoch seconds of the capture start, or 'now' "
