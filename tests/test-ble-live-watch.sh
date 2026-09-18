@@ -82,6 +82,7 @@ start_le_scan "hci0"
 run_live_pipeline "hci0" 4 "${workdir}/trace.btsnoop" "${workdir}/obs.jsonl" \
   --sensor-id sensor-T --epoch-base now \
   -- --profile balanced --config /dev/null --window 30 --interval 1 \
+     --jsonl-out "${workdir}/alerts.jsonl" \
   > "${workdir}/alerts.txt" 2> "${workdir}/alerts.err"
 stop_le_scan "hci0"
 
@@ -129,6 +130,22 @@ if ! grep -q '  ALERT ' "${workdir}/alerts.txt"; then
   cat "${workdir}/alerts.txt" "${workdir}/alerts.err" >&2
   exit 1
 fi
+
+# The text on the screen is for the operator; the JSONL is what a SIEM reads.
+# Every evaluation must be recorded, and the matches must be in it.
+python3 - "${workdir}/alerts.jsonl" <<'PY'
+import json, sys
+rows = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
+assert rows, "no alert records were written"
+for r in rows:
+    assert r["schema"] == "ble-alert/1", "wrong alert schema"
+    assert r["sensor_id"] == "sensor-T", "alert record lost the sensor id carried by the stream"
+    assert isinstance(r["matches"], list) and "window_sec" in r and "events" in r
+assert any(r["matches"] for r in rows), "spam fired on screen but no alert record carries a match"
+names = {m["name"] for r in rows for m in r["matches"]}
+assert "Flipper-like Apple popup spam pattern" in names, names
+print("alert records ok: %d evaluations, %d with matches" % (len(rows), sum(1 for r in rows if r["matches"])))
+PY
 
 # --- Sensor identity from config/interfaces.conf ----------------------------------
 # Copy the Python into a throwaway root so the test never reads or touches the

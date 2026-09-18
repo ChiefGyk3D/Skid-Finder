@@ -77,8 +77,19 @@ def event_clock(event, arrival):
     return arrival
 
 
-def report(window, cfg, window_seconds, out):
-    """Evaluate the current window and print status plus any matches."""
+ALERT_SCHEMA = "ble-alert/1"
+
+
+def report(window, cfg, window_seconds, out, jsonl=None, sensor_id=""):
+    """Evaluate the current window and print status plus any matches.
+
+    When a JSONL handle is given, every evaluation is also written there as
+    one 'ble-alert/1' object: the window statistics and the list of matches.
+    The text on stdout is for the operator; the JSONL is the record a SIEM or
+    collector ingests, so it is written whether or not anything matched. A
+    quiet window is evidence too, and a stream of them is what shows a sensor
+    is alive.
+    """
     records = [rec for _, rec in window]
     stats = ble_signatures.build_stats(records, duration=window_seconds)
     matches = ble_signatures.evaluate(stats, cfg)
@@ -92,6 +103,27 @@ def report(window, cfg, window_seconds, out):
     for match in matches:
         out.write(f"  ALERT {match.name} confidence={match.confidence}% :: {match.evidence}\n")
     out.flush()
+
+    if jsonl is not None:
+        event = {
+            "schema": ALERT_SCHEMA,
+            "ts": time.time(),
+            "sensor_id": sensor_id,
+            "modality": "ble",
+            "profile": cfg.profile,
+            "window_sec": round(window_seconds, 3),
+            "events": stats.total_events,
+            "unique_addrs": len(stats.unique_addrs),
+            "event_rate": round(stats.event_rate, 3),
+            "unique_ratio": round(stats.unique_ratio, 3),
+            "singleton_ratio": round(stats.singleton_ratio, 3),
+            "matches": [
+                {"name": m.name, "confidence": m.confidence, "evidence": m.evidence}
+                for m in matches
+            ],
+        }
+        jsonl.write(json.dumps(event, sort_keys=True) + "\n")
+        jsonl.flush()
     return matches
 
 
@@ -107,11 +139,24 @@ def main() -> int:
                         help="optional signatures config file path")
     parser.add_argument("--input", default="-",
                         help="JSONL observation stream to read, or '-' for stdin")
+    parser.add_argument("--jsonl-out", default=None,
+                        help="append one ble-alert/1 JSON object per evaluation to this "
+                             "file (the machine-readable record for a SIEM or collector)")
+    parser.add_argument("--sensor-id", default=os.environ.get("SENSOR_ID", ""),
+                        help="sensor id to stamp on alert records; defaults to the one "
+                             "carried by the observation stream")
     args = parser.parse_args()
 
     cfg = ble_signatures.load_config(args.profile, args.config)
 
     source = sys.stdin if args.input == "-" else open(args.input, encoding="utf-8")
+    jsonl = None
+    if args.jsonl_out:
+        directory = os.path.dirname(os.path.abspath(args.jsonl_out))
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        jsonl = open(args.jsonl_out, "a", encoding="utf-8")
+    sensor_id = args.sensor_id
     window = collections.deque()
     latest_clock = None
     last_eval = time.monotonic()
@@ -138,6 +183,8 @@ def main() -> int:
                     skipped += 1
                     continue
                 if event.get("schema", "").startswith("ble-obs/") and event.get("address"):
+                    if not sensor_id and event.get("sensor_id"):
+                        sensor_id = str(event["sensor_id"])
                     clock = event_clock(event, time.monotonic())
                     latest_clock = clock if latest_clock is None else max(latest_clock, clock)
                     window.append((clock, record_from_event(event)))
@@ -149,7 +196,7 @@ def main() -> int:
 
             now = time.monotonic()
             if now - last_eval >= args.interval:
-                report(window, cfg, window_span(), sys.stdout)
+                report(window, cfg, window_span(), sys.stdout, jsonl, sensor_id)
                 last_eval = now
     except KeyboardInterrupt:
         pass
@@ -162,7 +209,9 @@ def main() -> int:
     # Final evaluation on whatever remains, so a short piped capture still
     # produces a verdict.
     if window:
-        report(window, cfg, window_span(), sys.stdout)
+        report(window, cfg, window_span(), sys.stdout, jsonl, sensor_id)
+    if jsonl is not None:
+        jsonl.close()
     if skipped:
         sys.stderr.write(f"note: skipped {skipped} unparseable line(s)\n")
     return 0

@@ -11,6 +11,7 @@ set -euo pipefail
 #
 #   logs/btmon-<iface>-<stamp>.btsnoop   replayable binary trace
 #   logs/obs-<iface>-<stamp>.jsonl       one ble-obs/1 record per advert
+#   logs/alerts-<iface>-<stamp>.jsonl    one ble-alert/1 record per evaluation
 #
 # Observations are stamped with SENSOR_ID / SENSOR_LAT / SENSOR_LON from
 # config/interfaces.conf and carry absolute timestamps, so the same file can be
@@ -65,6 +66,7 @@ mkdir -p "${ROOT_DIR}/logs"
 STAMP="$(now_stamp)"
 TRACE="${ROOT_DIR}/logs/btmon-${IFACE}-${STAMP}.btsnoop"
 OBS="${ROOT_DIR}/logs/obs-${IFACE}-${STAMP}.jsonl"
+ALERTS="${ROOT_DIR}/logs/alerts-${IFACE}-${STAMP}.jsonl"
 
 if (( DURATION > 0 )); then
   echo "Live watch on ${IFACE} for ${DURATION}s (profile=${PROFILE}, window=${WINDOW}s)"
@@ -73,6 +75,7 @@ else
 fi
 echo "Trace: ${TRACE}"
 echo "Observations: ${OBS}"
+echo "Alerts: ${ALERTS}"
 if [[ "${PROFILE}" == "conservative" && "${WINDOW}" -lt 60 ]]; then
   echo "note: the conservative profile needs a long window to reach a verdict;" >&2
   echo "note: with WINDOW=${WINDOW} it may never fire. Consider WINDOW=60 or more." >&2
@@ -89,7 +92,8 @@ run_live_pipeline "${IFACE}" "${DURATION}" "${TRACE}" "${OBS}" \
   --sensor-lon "${SENSOR_LON:-}" \
   --epoch-base now \
   -- \
-  --profile "${PROFILE}" --window "${WINDOW}" --interval "${INTERVAL}"
+  --profile "${PROFILE}" --window "${WINDOW}" --interval "${INTERVAL}" \
+  --jsonl-out "${ALERTS}"
 
 stop_le_scan "${IFACE}"
 

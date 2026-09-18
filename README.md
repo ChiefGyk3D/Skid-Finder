@@ -351,7 +351,9 @@ sudo stdbuf -oL btmon -i hci0 \
 ```
 
 See [docs/sensor-net-notes.md](docs/sensor-net-notes.md) for the `ble-obs/1`
-schema and how this becomes the foundation for a triangulating sensor net.
+schema and how this becomes the foundation for a triangulating sensor net,
+and [docs/siem-ingestion.md](docs/siem-ingestion.md) for the `ble-alert/1`
+record the live watcher writes and how to ship both files to a SIEM.
 
 ### 4) Dual-pane session
 
@@ -635,6 +637,15 @@ or `session` tier device, or a spam source that transmits continuously. A
 `model`/`ambiguous` tier target is a product, possibly several people, and
 triangulating it triangulates a crowd. The collector, transport, and location
 math are not yet implemented; the data model they need is.
+
+### SIEM and dashboards (records exist, pipeline untested)
+
+Live runs write `logs/alerts-<iface>-<stamp>.jsonl`, one `ble-alert/1`
+record per detector evaluation, beside the `ble-obs/1` observation file. Both
+are JSON Lines a log shipper can pick up as-is. The record shapes and the
+intended Wazuh/OpenSearch path are in
+[docs/siem-ingestion.md](docs/siem-ingestion.md); no shipper configuration has
+been exercised end to end from this toolkit yet, and there is no dashboard.
 
 ### Wi-Fi attack detection and fingerprinting (planned)
 
