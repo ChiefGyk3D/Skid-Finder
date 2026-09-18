@@ -89,6 +89,21 @@ GitHub milestones track the same list; issues attach to them.
 | 0.9.0-beta | [#4](https://github.com/ChiefGyk3D/Skid-Finder/milestone/4) | The hardware checklist above, complete. |
 | 1.0.0 | [#5](https://github.com/ChiefGyk3D/Skid-Finder/milestone/5) | One event's worth of use, SIEM path exercised end to end, Hammunition manifest merged. |
 
+## After 1.0
+
+The direction past 1.0 is recorded in
+[post-1.0-direction.md](post-1.0-direction.md): Wi-Fi brought to parity
+with BLE (fingerprinting, sighting history, watchlist, foxhunt), LoRa and
+Meshtastic spam and spoofing detection on the AIO's own radio, the other
+radios the rig or a sibling project already covers (802.15.4, sub-GHz ISM,
+cellular via Rayhunter, GNSS spoofing, spectrum watch for jammers), and the
+operational half an enterprise needs (fixed fleets, incident records,
+evidence bundles, foxhunt handoff, SIEM dashboards, access and retention).
+Milestones [#6](https://github.com/ChiefGyk3D/Skid-Finder/milestone/6) to
+[#9](https://github.com/ChiefGyk3D/Skid-Finder/milestone/9) track them.
+Every track keeps the two rules: receive-only, and say only what the data
+supports.
+
 ## What is deliberately not promised
 
 - A pin on a map. RSSI location indoors is metres to tens of metres at best;

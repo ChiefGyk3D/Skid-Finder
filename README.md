@@ -635,7 +635,11 @@ CI but not yet confirmed on the uConsole hardware.
 ## Known Limitations and Roadmap
 
 Open work, kept here rather than in a tracker so the caveats travel with the
-tool. The milestone view of the same list is [docs/ROADMAP.md](docs/ROADMAP.md).
+tool. The milestone view of the same list is [docs/ROADMAP.md](docs/ROADMAP.md),
+and what comes after 1.0 (Wi-Fi fingerprinting and foxhunting, LoRa and
+Meshtastic, 802.15.4, sub-GHz, cellular, GNSS, spectrum watch, and the
+enterprise operations layer) is in
+[docs/post-1.0-direction.md](docs/post-1.0-direction.md).
 
 ### Detector thresholds are measured, but not yet against real quiet RF
 
