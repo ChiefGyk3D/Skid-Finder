@@ -36,10 +36,11 @@ fi
 CAPTURE_HCI="hci0"
 HUNT_HCI="hci1"
 SCAN_SECONDS="30"
+WIFI_IFACE=""
 if [[ -f "${ROOT_DIR}/config/interfaces.conf" ]]; then
   # shellcheck source=lib.sh
   source "${SCRIPT_DIR}/lib.sh"
-  load_conf_file "${ROOT_DIR}/config/interfaces.conf" CAPTURE_HCI HUNT_HCI SCAN_SECONDS 2>/dev/null || true
+  load_conf_file "${ROOT_DIR}/config/interfaces.conf" CAPTURE_HCI HUNT_HCI SCAN_SECONDS WIFI_IFACE 2>/dev/null || true
 fi
 
 latest_capture() {
@@ -61,6 +62,9 @@ ACTIONS=(
   "field|Field run: capture + full summary to logs/|[iface] [seconds]"
   "live|Live spam alerts until Ctrl+C|[iface] [seconds] [profile]"
   "capture|Raw btmon capture to logs/|[iface] [seconds]"
+  "wifi-capture|Passive Wi-Fi capture to logs/ (monitor mode)|[iface] [seconds]"
+  "wifi-live|Live Wi-Fi attack alerts until Ctrl+C|[iface] [seconds] [profile]"
+  "wifi-scan|Wi-Fi signature scan of the latest capture|[capture] [profile]"
   "hunt|Foxhunt a target by MAC, or by name from the latest capture|<mac-or-name> [iface]"
   "fingerprint|Identify and track devices in the latest capture|[capture]"
   "scan|Signature scan of the latest capture|[capture] [profile]"
@@ -102,6 +106,31 @@ build_command() {
       ;;
     capture)
       cmd=("${SUDO}" "${SCRIPT_DIR}/capture-btmon.sh" "${1:-${CAPTURE_HCI}}" "${2:-${SCAN_SECONDS}}")
+      ;;
+    wifi-capture|wifi-live)
+      if ! has_script wifi-capture.sh; then
+        echo "Wi-Fi detection is not in this checkout (scripts/wifi-capture.sh missing)." >&2
+        return 2
+      fi
+      local wiface="${1:-${WIFI_IFACE}}"
+      if [[ -z "${wiface}" ]]; then
+        echo "no Wi-Fi interface: set WIFI_IFACE in config/interfaces.conf or pass one." >&2
+        return 2
+      fi
+      if [[ "${action}" == "wifi-capture" ]]; then
+        cmd=("${SUDO}" "${SCRIPT_DIR}/wifi-capture.sh" "${wiface}" "${2:-${SCAN_SECONDS}}")
+      else
+        cmd=("${SUDO}" "${SCRIPT_DIR}/wifi-live-watch.sh" "${wiface}" "${2:-0}" "${3:-balanced}")
+      fi
+      ;;
+    wifi-scan)
+      local wcap="${1:-$(ls -1t "${ROOT_DIR}"/logs/wifi-*.tsv 2>/dev/null | head -n 1 || true)}"
+      if [[ -z "${wcap}" ]]; then
+        echo "no Wi-Fi capture in logs/ to scan; run a Wi-Fi capture first." >&2
+        return 2
+      fi
+      cmd=(python3 "${SCRIPT_DIR}/wifi-signature-scan.py" --input "${wcap}")
+      [[ -n "${2:-}" ]] && cmd+=(--profile "$2")
       ;;
     hunt)
       local target="${1:-}"
@@ -241,6 +270,9 @@ interactive() {
       if [[ "${tag}" == "live" ]] && ! has_script ble-live-watch.sh; then
         continue
       fi
+      if [[ "${tag}" == wifi-* ]] && ! has_script wifi-capture.sh; then
+        continue
+      fi
       items+=("${tag}" "${desc}")
     done
     items+=("quit" "Leave the menu")
@@ -256,6 +288,16 @@ interactive() {
       watch|capture)
         a1="$(ask "${choice}" "Adapter" "${CAPTURE_HCI}")"
         a2="$(ask "${choice}" "Seconds" "${SCAN_SECONDS}")" ;;
+      wifi-capture)
+        a1="$(ask "Wi-Fi capture" "Wi-Fi interface" "${WIFI_IFACE}")"
+        a2="$(ask "Wi-Fi capture" "Seconds" "${SCAN_SECONDS}")" ;;
+      wifi-live)
+        a1="$(ask "Wi-Fi live" "Wi-Fi interface" "${WIFI_IFACE}")"
+        a2="$(ask "Wi-Fi live" "Seconds (0 = until Ctrl+C)" "0")"
+        a3="$(choose "Wi-Fi live" "Sensitivity profile" balanced "default" aggressive "more alerts" conservative "fewer alerts")" ;;
+      wifi-scan)
+        a1="$(ask "Wi-Fi scan" "Capture file (blank = latest)" "")"
+        a2="$(choose "Wi-Fi scan" "Profile" balanced "default" conservative "fewer alerts" aggressive "more alerts")" ;;
       field)
         a1="$(ask "Field run" "Adapter" "${CAPTURE_HCI}")"
         a2="$(ask "Field run" "Seconds" "300")" ;;

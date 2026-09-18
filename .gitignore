@@ -25,6 +25,7 @@ Thumbs.db
 # Local operator config (copy from the .example files, keep local)
 config/interfaces.conf
 config/signatures.conf
+config/wifi-signatures.conf
 config/aio-features.conf
 # A watchlist holds addresses and names of other people's devices. Never commit it.
 config/watchlist.conf

@@ -1,0 +1,74 @@
+# Copy to config/wifi-signatures.conf and tune for your environment.
+#
+# Keys are generated from wifi_signatures.py's built-in defaults. An
+# unrecognised key is ignored and reported on stderr, so a renamed or
+# misspelled threshold silently keeps its default.
+#
+# IMPORTANT: none of these thresholds have been measured on a real venue.
+# They were set from the shape of the attacks and what ordinary
+# infrastructure does. Baseline before trusting them:
+#
+#   sudo ./scripts/wifi-capture.sh wlan1 60
+#   python3 scripts/wifi-signature-scan.py --input logs/<capture>.tsv
+#
+# Nothing should match on ordinary traffic. Rates are per second, ratios
+# 0.0-1.0. One real deauth per minute from a venue AP is normal; a flood is
+# tens per second. Enterprise Wi-Fi advertises one SSID from many APs that
+# share a vendor prefix; evil_twin_min_ouis is what keeps that from matching.
+
+[general]
+# conservative | balanced | aggressive
+profile = balanced
+
+
+
+[balanced]
+min_duration_sec = 5
+deauth_min_rate = 4.0
+deauth_min_frames = 30
+deauth_min_targets = 1
+beacon_min_bssid_rate = 2.0
+beacon_min_unique_bssids = 30
+beacon_min_singleton_ratio = 0.7
+evil_twin_min_bssids = 3
+evil_twin_min_ouis = 2
+karma_min_ssids = 8
+karma_min_responses = 20
+enable_deauth = true
+enable_beacon = true
+enable_evil_twin = true
+enable_karma = true
+
+[conservative]
+min_duration_sec = 10
+deauth_min_rate = 8.0
+deauth_min_frames = 60
+deauth_min_targets = 1
+beacon_min_bssid_rate = 4.0
+beacon_min_unique_bssids = 60
+beacon_min_singleton_ratio = 0.8
+evil_twin_min_bssids = 4
+evil_twin_min_ouis = 3
+karma_min_ssids = 12
+karma_min_responses = 30
+enable_deauth = true
+enable_beacon = true
+enable_evil_twin = true
+enable_karma = true
+
+[aggressive]
+min_duration_sec = 3
+deauth_min_rate = 1.5
+deauth_min_frames = 10
+deauth_min_targets = 1
+beacon_min_bssid_rate = 1.0
+beacon_min_unique_bssids = 15
+beacon_min_singleton_ratio = 0.5
+evil_twin_min_bssids = 3
+evil_twin_min_ouis = 2
+karma_min_ssids = 5
+karma_min_responses = 10
+enable_deauth = true
+enable_beacon = true
+enable_evil_twin = true
+enable_karma = true

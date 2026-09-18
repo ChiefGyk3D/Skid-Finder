@@ -110,6 +110,22 @@ out="$("${MENU}" --print fingerprint)"
 out="$("${MENU}" --print aio restore)"
 [[ "${out}" == *"aio-feature-profile.sh restore" ]] || fail "aio malformed: ${out}"
 
+# --- Wi-Fi actions need an interface and refuse cleanly without one -------------
+if [[ -x "${ROOT_DIR}/scripts/wifi-capture.sh" ]]; then
+  if "${MENU}" --print wifi-capture > /dev/null 2>&1; then
+    fail "wifi-capture with no WIFI_IFACE should refuse"
+  fi
+  printf 'WIFI_IFACE="wlan7"\n' >> "${workdir}/root/config/interfaces.conf"
+  out="$("${MENU}" --print wifi-capture)"
+  [[ "${out}" == *"wifi-capture.sh wlan7 45" ]] || fail "wifi-capture did not take iface/seconds from config: ${out}"
+  out="$("${MENU}" --print wifi-live "" 120 aggressive)"
+  [[ "${out}" == *"wifi-live-watch.sh wlan7 120 aggressive" ]] || fail "wifi-live malformed: ${out}"
+  "${MENU}" --print wifi-scan > /dev/null 2>&1 && fail "wifi-scan with no capture should refuse"
+  : > "${workdir}/root/logs/wifi-wlan7-20260918-120000.tsv"
+  out="$("${MENU}" --print wifi-scan)"
+  [[ "${out}" == *"wifi-signature-scan.py --input "*"wifi-wlan7-20260918-120000.tsv" ]] || fail "wifi-scan malformed: ${out}"
+fi
+
 # --- The live action appears only when the script exists ----------------------
 if [[ -x "${ROOT_DIR}/scripts/ble-live-watch.sh" ]]; then
   out="$("${MENU}" --print live)"
