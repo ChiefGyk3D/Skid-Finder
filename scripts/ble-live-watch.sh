@@ -82,7 +82,25 @@ if [[ "${PROFILE}" == "conservative" && "${WINDOW}" -lt 60 ]]; then
 fi
 echo
 
-trap 'stop_le_scan "${IFACE}"' EXIT
+PUBLISH_PID=""
+stop_publisher() {
+  [[ -n "${PUBLISH_PID}" ]] || return 0
+  kill "${PUBLISH_PID}" 2>/dev/null || true
+  wait "${PUBLISH_PID}" 2>/dev/null || true
+  PUBLISH_PID=""
+}
+trap 'stop_publisher; stop_le_scan "${IFACE}"' EXIT
+
+# Sensor-net transport: when a broker is configured, ship the records as
+# they are written. The publisher tails the files, so a broker outage never
+# touches the capture; the files remain the record and can be shipped later.
+if [[ -n "${MQTT_HOST:-}" ]]; then
+  : > "${OBS}"
+  : > "${ALERTS}"
+  python3 "${SCRIPT_DIR}/ble-publish.py" --follow "${OBS}" "${ALERTS}" --heartbeat 30 &
+  PUBLISH_PID=$!
+  echo "Publishing to ${MQTT_HOST}:${MQTT_PORT:-1883} as ${SENSOR_ID:-unknown}"
+fi
 
 start_le_scan "${IFACE}"
 
@@ -96,6 +114,11 @@ run_live_pipeline "${IFACE}" "${DURATION}" "${TRACE}" "${OBS}" \
   --jsonl-out "${ALERTS}"
 
 stop_le_scan "${IFACE}"
+# Give the publisher one more pass over the files before it goes.
+if [[ -n "${PUBLISH_PID}" ]]; then
+  sleep 1
+  stop_publisher
+fi
 
 echo
 if [[ ! -s "${OBS}" ]]; then

@@ -180,7 +180,9 @@ if ! grep -q '"sensor_id": "env-wins"' "${workdir}/env.json"; then
 fi
 
 # --- The wrapper must use the helper, not a bare pipeline --------------------------
-for needle in start_le_scan run_live_pipeline; do
+# And it must ship records when a broker is configured, without making the
+# capture depend on the broker.
+for needle in start_le_scan run_live_pipeline ble-publish.py; do
   if ! grep -q "${needle}" "${ROOT_DIR}/scripts/ble-live-watch.sh"; then
     echo "FAIL: ble-live-watch.sh does not call ${needle}." >&2
     exit 1

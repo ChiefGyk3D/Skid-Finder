@@ -9,6 +9,37 @@ would break.
 
 ## [Unreleased]
 
+## [0.2.0-alpha.1] — 2026-09-18
+
+Closes milestone [v0.2.0 alpha](https://github.com/ChiefGyk3D/Skid-Finder/milestone/2).
+**Alpha:** the publisher and collector are exercised against a stand-in
+broker in CI; no real broker, second physical node, or ESP32 build has been
+run from this project yet.
+
+### Added
+- `scripts/ble-collector.py`: merges `ble-obs/1`, `ble-alert/1` and
+  `sensor-status/1` records from several sensors (MQTT, a watched
+  directory, or files), keys devices by `identity_key` across sensors, runs
+  the shared detector over each sensor's window, estimates location for
+  `strong`/`session` identities and for floods as an RSSI-weighted centroid
+  with `spread_m` as the error bar, and writes `fleet-state/1` snapshots
+  and `fleet-alert/1` records.
+- `scripts/ble-publish.py`: tails a node's JSONL files onto MQTT
+  (`<prefix>/<sensor_id>/{obs,alerts,status}`, QoS 1, retained heartbeat,
+  last will), or ships a finished file after the fact.
+- `MQTT_HOST`, `MQTT_PORT`, `MQTT_TLS`, `MQTT_TOPIC_PREFIX` config keys;
+  `ble-live-watch.sh` starts the publisher when a broker is configured.
+  Credentials are environment-only.
+- `docs/sensor-nodes.md`: the node contract (records, topics, time,
+  placement, security) and `nodes/esp32/` reference sketch (alpha, not
+  compiled here).
+- `scripts/skid_conf.py`: one config reader for the Python tools, with the
+  same quoting rules as `lib.sh`.
+- `tests/test-sensor-net.sh` and `tests/make-fleet-fixture.py`: three
+  positioned sensors, a public device near one and a flood loudest at
+  another; asserts merge, tier handling, location ordering, alert timing,
+  topics, QoS, retained heartbeat and last will.
+
 ## [0.1.0-alpha.1] — 2026-09-18
 
 Closes milestone [v0.1.0 alpha](https://github.com/ChiefGyk3D/Skid-Finder/milestone/1).
@@ -62,5 +93,6 @@ this into a beta is in `docs/ROADMAP.md`.
 - Detector false positives on ordinary crowds: rules now key on address
   reuse shape, not on volume or on the random-address ratio.
 
-[Unreleased]: https://github.com/ChiefGyk3D/Skid-Finder/compare/v0.1.0-alpha.1...HEAD
+[Unreleased]: https://github.com/ChiefGyk3D/Skid-Finder/compare/v0.2.0-alpha.1...HEAD
+[0.2.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.2.0-alpha.1
 [0.1.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.1.0-alpha.1

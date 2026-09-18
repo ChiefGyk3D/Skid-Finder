@@ -37,3 +37,14 @@ ALERT_ADS_PER_ADDR="40"
 SENSOR_ID="uconsole-01"
 SENSOR_LAT=""
 SENSOR_LON=""
+
+# Sensor-net transport. When MQTT_HOST is set, ble-live-watch.sh also ships
+# every observation and alert record to the broker (scripts/ble-publish.py)
+# on <MQTT_TOPIC_PREFIX>/<SENSOR_ID>/{obs,alerts,status}, and the collector
+# (scripts/ble-collector.py --mqtt) reads them back. Leave MQTT_HOST empty
+# for a stand-alone sensor. Credentials never go in this file: set
+# MQTT_USERNAME and MQTT_PASSWORD in the environment of the publishing shell.
+MQTT_HOST=""
+MQTT_PORT="1883"
+MQTT_TLS="no"
+MQTT_TOPIC_PREFIX="skidfinder"
