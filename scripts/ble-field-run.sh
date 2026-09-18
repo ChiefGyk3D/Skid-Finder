@@ -29,16 +29,22 @@ mkdir -p "${ROOT_DIR}/logs"
 STAMP="$(now_stamp)"
 CAPTURE_LOG="${ROOT_DIR}/logs/btmon-${IFACE}-${STAMP}.log"
 CAPTURE_TRACE="${ROOT_DIR}/logs/btmon-${IFACE}-${STAMP}.btsnoop"
+OBS_FILE="${ROOT_DIR}/logs/obs-${IFACE}-${STAMP}.jsonl"
 SUMMARY_FILE="${ROOT_DIR}/logs/summary-${IFACE}-${STAMP}.txt"
 
 echo "Starting BLE field run on ${IFACE} for ${DURATION}s"
 echo "Capture log: ${CAPTURE_LOG}"
 echo "Capture trace: ${CAPTURE_TRACE}"
+echo "Observations: ${OBS_FILE}"
 echo "Summary file: ${SUMMARY_FILE}"
 
 trap 'stop_capture_progress; stop_le_scan "${IFACE}"' EXIT
 
 start_le_scan "${IFACE}"
+# btmon's timestamps are offsets from its first packet, so wall-clock time
+# taken here is the base that turns them into absolute time, give or take the
+# moment the first advert lands.
+CAPTURE_EPOCH="$(date +%s)"
 start_capture_progress "${CAPTURE_LOG}" "${DURATION}" 10
 run_btmon_capture "${IFACE}" "${DURATION}" "${CAPTURE_LOG}" quiet "${CAPTURE_TRACE}"
 stop_capture_progress
@@ -50,6 +56,13 @@ echo
 echo "Capture finished. Analysing..."
 echo
 
+# Normalized observations: one ble-obs/1 record per advert, stamped with this
+# sensor's identity from config/interfaces.conf. This is the artifact a
+# collector or SIEM ingests; the text log and summary are for people.
+if ! python3 "${SCRIPT_DIR}/ble-observe.py" --input "${CAPTURE_LOG}"      --out "${OBS_FILE}" --epoch-base "${CAPTURE_EPOCH}"; then
+  echo "warn: could not write normalized observations to ${OBS_FILE}." >&2
+fi
+
 {
   echo "# BLE Field Summary"
   echo "generated_at=$(date -Is)"
@@ -58,6 +71,7 @@ echo
   echo "alert_threshold=${ALERT_THRESHOLD}"
   echo "capture_log=${CAPTURE_LOG}"
   echo "capture_trace=${CAPTURE_TRACE}"
+  echo "observations=${OBS_FILE}"
   echo
 
   total_lines=$(wc -l < "${CAPTURE_LOG}" | tr -d ' ')

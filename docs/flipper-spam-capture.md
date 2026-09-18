@@ -81,9 +81,7 @@ Once you have the Flipper spamming, watch the live alerter fire in real time —
 this is the field workflow, not just a corpus builder:
 
 ```bash
-sudo btmon -i hci0 \
-  | ./scripts/ble-observe.py --stream --sensor-id "$SENSOR_ID" \
-  | ./scripts/ble-live-alert.py --window 30 --interval 5 --profile balanced
+sudo ./scripts/ble-live-watch.sh hci0 0 balanced
 ```
 
 You should see `ALERT` lines appear within a window or two of starting the

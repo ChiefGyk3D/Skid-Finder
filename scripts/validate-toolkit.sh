@@ -115,6 +115,7 @@ except OSError as exc:
   check_file "tests/make-fixture.py"
   check_file "tests/test-detector-metrics.py"
   check_file "tests/test-ble-observe.sh"
+  check_file "tests/test-ble-live-watch.sh"
   check_file "tests/corpus/manifest.jsonl"
   check_file "tests/test-toolkit.sh"
 
@@ -129,6 +130,7 @@ except OSError as exc:
     scripts/ble-signature-scan.py \
     scripts/ble-observe.py \
     scripts/ble-live-alert.py \
+    scripts/ble-live-watch.sh \
     scripts/ble-spam-watch.sh \
     scripts/capture-btmon.sh \
     scripts/foxhunt-rssi.sh \

@@ -153,6 +153,8 @@ def main() -> int:
                 last_eval = now
     except KeyboardInterrupt:
         pass
+    except BrokenPipeError:
+        return 0
     finally:
         if source is not sys.stdin:
             source.close()

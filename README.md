@@ -319,19 +319,36 @@ Wi-Fi frontend will reuse, captures can be emitted as normalized JSON Lines,
 one object per advertising report, stamped with which sensor saw it:
 
 ```bash
+# Alert on spam live. Runs until Ctrl+C; give a duration in seconds to bound it.
+sudo ./scripts/ble-live-watch.sh
+sudo ./scripts/ble-live-watch.sh hci0 120 aggressive
+
 # Convert a finished capture to a normalized stream.
 ./scripts/ble-observe.py --input logs/capture.log --out logs/obs.jsonl
-
-# Or alert on spam live, straight off btmon:
-sudo btmon -i hci0 \
-  | ./scripts/ble-observe.py --stream --sensor-id "$SENSOR_ID" \
-  | ./scripts/ble-live-alert.py --window 30 --interval 5 --profile balanced
 ```
+
+`ble-live-watch.sh` enables an LE scan on the radio for the run (btmon alone
+records nothing on an idle adapter), line-buffers btmon so each advert reaches
+the detector as it lands, and leaves two artifacts behind: the `.btsnoop`
+trace and `logs/obs-<iface>-<timestamp>.jsonl`, one record per advert with
+absolute timestamps. `ble-field-run.sh` writes the same `obs-*.jsonl` beside
+its summary, so every capture already produces the file a collector or SIEM
+ingests.
 
 The live alerter runs the *same* detector as the batch scanner over a sliding
 window, so a threshold tuned in `config/signatures.conf` changes both. Set
 `SENSOR_ID`, and optionally `SENSOR_LAT`/`SENSOR_LON`, in
-`config/interfaces.conf` so every observation is attributable to a sensor.
+`config/interfaces.conf` so every observation is attributable to a sensor;
+the observer reads them from there, and the environment overrides the file.
+
+Under the hood the wrapper runs this pipeline, which you can assemble yourself
+if you need to (the LE scan is the part that is easy to forget):
+
+```bash
+sudo stdbuf -oL btmon -i hci0 \
+  | ./scripts/ble-observe.py --stream --epoch-base now \
+  | ./scripts/ble-live-alert.py --window 30 --interval 5 --profile balanced
+```
 
 See [docs/sensor-net-notes.md](docs/sensor-net-notes.md) for the `ble-obs/1`
 schema and how this becomes the foundation for a triangulating sensor net.
@@ -352,7 +369,8 @@ sudo ./scripts/ble-field-run.sh
 ```
 
 Outputs:
-- `logs/btmon-<iface>-<timestamp>.log`
+- `logs/btmon-<iface>-<timestamp>.log` and `.btsnoop`
+- `logs/obs-<iface>-<timestamp>.jsonl` (normalized observations, see 3c)
 - `logs/summary-<iface>-<timestamp>.txt`
 
 The summary now includes a signature scan section based on the captured `btmon` log.
@@ -385,7 +403,7 @@ Run the full local validation suite before a field session:
 ./tests/test-toolkit.sh
 ```
 
-This checks shell syntax for the toolkit scripts, runs `shellcheck` and `ruff` when they are installed, confirms the example config files exist, exercises the signature, fingerprint, GPS-merge and normalized-observation regression tests, measures detector false-positive rate and recall against the labeled corpus, verifies the capture pipeline survives its own timeout, and writes a timestamped report under `logs/`.
+This checks shell syntax for the toolkit scripts, runs `shellcheck` and `ruff` when they are installed, confirms the example config files exist, exercises the signature, fingerprint, GPS-merge, normalized-observation and live-watch regression tests, measures detector false-positive rate and recall against the labeled corpus, verifies the capture pipeline survives its own timeout, and writes a timestamped report under `logs/`.
 
 The same suite runs in CI on every push and pull request. To match CI locally, install `shellcheck`:
 

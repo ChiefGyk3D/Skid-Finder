@@ -35,13 +35,63 @@ Examples:
 import argparse
 import json
 import os
+import re
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ble_parse  # noqa: E402
 from ble_identity import identity_key  # noqa: E402
 
 SCHEMA = "ble-obs/1"
+
+# Sensor identity settings read from config/interfaces.conf when neither the
+# command line nor the environment supplies them. The README tells operators
+# to set these in the config file, and every shell script parses that file
+# through lib.sh; this tool is Python, so it reads the same three keys itself
+# rather than silently defaulting to "unknown".
+CONF_KEYS = ("SENSOR_ID", "SENSOR_LAT", "SENSOR_LON")
+QUOTED_RE = re.compile(r"""^"([^"]*)"|^'([^']*)'""")
+
+
+def read_sensor_conf(path):
+    """Return {KEY: value} for the sensor keys in a KEY=value config file.
+
+    Mirrors lib.sh: the file is data, never executed; quoted values keep
+    their contents, unquoted values lose a trailing '# comment'.
+    """
+    found = {}
+    try:
+        with open(path, encoding="utf-8") as handle:
+            for raw in handle:
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                key, sep, value = line.partition("=")
+                key = key.strip()
+                if not sep or key not in CONF_KEYS:
+                    continue
+                value = value.strip()
+                # Same rules as lib.sh: a quoted value keeps its contents and
+                # drops whatever follows the closing quote; an unquoted value
+                # is cut at the first '#'.
+                quoted = QUOTED_RE.match(value)
+                if quoted:
+                    value = quoted.group(1) or quoted.group(2) or ""
+                else:
+                    value = value.split("#", 1)[0].strip()
+                found[key] = value
+    except OSError:
+        pass
+    return found
+
+
+def sensor_default(name, conf):
+    """Precedence: environment, then config/interfaces.conf, then empty."""
+    value = os.environ.get(name)
+    if value is None or value == "":
+        value = conf.get(name, "")
+    return value
 
 
 def to_event(record, sensor_id, lat, lon, epoch_base):
@@ -50,9 +100,9 @@ def to_event(record, sensor_id, lat, lon, epoch_base):
     ts = record.timestamp
     ts_absolute = False
     if ts is not None and epoch_base is not None:
-        # btmon timestamps are capture-relative seconds. Adding a known base
-        # (the capture's wall-clock start) turns them into absolute epoch time,
-        # which is what a multi-sensor collector needs to line events up.
+        # btmon timestamps are offsets from its first packet. Adding a known
+        # base (the capture's wall-clock start) turns them into absolute epoch
+        # time, which is what a multi-sensor collector needs to line events up.
         ts = ts + epoch_base
         ts_absolute = True
 
@@ -82,7 +132,14 @@ def to_event(record, sensor_id, lat, lon, epoch_base):
 def emit(records, handle, args):
     count = 0
     for record in records:
-        event = to_event(record, args.sensor_id, args.lat, args.lon, args.epoch_base)
+        if args.epoch_base == "now" and record.timestamp is not None:
+            # Live mode: pin the base to the first advert's arrival. btmon's
+            # offsets count from its first packet, so wall-clock-now minus that
+            # offset is the base, accurate to pipe latency rather than to the
+            # seconds it took to bring the scan up.
+            args.epoch_base = time.time() - record.timestamp
+        base = args.epoch_base if isinstance(args.epoch_base, float) else None
+        event = to_event(record, args.sensor_id, args.lat, args.lon, base)
         handle.write(json.dumps(event, sort_keys=True) + "\n")
         # Flush per line in stream mode so a downstream consumer (or a person
         # watching) sees observations as they happen, not in block-buffered
@@ -102,7 +159,22 @@ def coerce_float(value, name):
         sys.exit(f"ERROR: {name} must be a number, got {value!r}")
 
 
+def parse_epoch_base(value):
+    if value is None:
+        return None
+    if value == "now":
+        return "now"
+    try:
+        return float(value)
+    except ValueError:
+        sys.exit(f"ERROR: --epoch-base must be a number or 'now', got {value!r}")
+
+
 def main() -> int:
+    conf_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                             "config", "interfaces.conf")
+    conf = read_sensor_conf(conf_path)
+
     parser = argparse.ArgumentParser(description="Emit normalized BLE observations as JSON Lines")
     src = parser.add_mutually_exclusive_group(required=True)
     src.add_argument("--input", help="btmon text capture to convert")
@@ -110,19 +182,22 @@ def main() -> int:
                      help="read btmon text from stdin and emit live")
     parser.add_argument("--out", default="-",
                         help="output JSONL path, or '-' for stdout (default)")
-    parser.add_argument("--sensor-id", default=os.environ.get("SENSOR_ID", "unknown"),
-                        help="identifier for this sensor (default: $SENSOR_ID or 'unknown')")
-    parser.add_argument("--sensor-lat", default=os.environ.get("SENSOR_LAT", ""),
+    parser.add_argument("--sensor-id", default=sensor_default("SENSOR_ID", conf) or "unknown",
+                        help="identifier for this sensor (default: $SENSOR_ID, then "
+                             "SENSOR_ID in config/interfaces.conf, then 'unknown')")
+    parser.add_argument("--sensor-lat", default=sensor_default("SENSOR_LAT", conf),
                         help="sensor latitude in decimal degrees (stationary sensors)")
-    parser.add_argument("--sensor-lon", default=os.environ.get("SENSOR_LON", ""),
+    parser.add_argument("--sensor-lon", default=sensor_default("SENSOR_LON", conf),
                         help="sensor longitude in decimal degrees (stationary sensors)")
-    parser.add_argument("--epoch-base", type=float, default=None,
-                        help="wall-clock epoch seconds of the capture start; when "
-                             "given, per-record timestamps become absolute")
+    parser.add_argument("--epoch-base", default=None,
+                        help="wall-clock epoch seconds of the capture start, or 'now' "
+                             "to pin it to the first advert's arrival in --stream mode; "
+                             "when given, per-record timestamps become absolute")
     args = parser.parse_args()
 
     args.lat = coerce_float(args.sensor_lat, "--sensor-lat")
     args.lon = coerce_float(args.sensor_lon, "--sensor-lon")
+    args.epoch_base = parse_epoch_base(args.epoch_base)
 
     if args.stream:
         records = ble_parse.iter_records(sys.stdin)
@@ -131,15 +206,26 @@ def main() -> int:
             sys.exit(f"ERROR: input file not found: {args.input}")
         records = ble_parse.parse_records(args.input)
 
-    if args.out == "-":
-        count = emit(records, sys.stdout, args)
-    else:
-        directory = os.path.dirname(os.path.abspath(args.out))
-        if directory:
-            os.makedirs(directory, exist_ok=True)
-        with open(args.out, "w", encoding="utf-8") as handle:
-            count = emit(records, handle, args)
-        print(f"wrote {count} observations to {args.out}", file=sys.stderr)
+    try:
+        if args.out == "-":
+            count = emit(records, sys.stdout, args)
+        else:
+            directory = os.path.dirname(os.path.abspath(args.out))
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+            with open(args.out, "w", encoding="utf-8") as handle:
+                count = emit(records, handle, args)
+            print(f"wrote {count} observations to {args.out}", file=sys.stderr)
+    except KeyboardInterrupt:
+        # Ctrl+C on a live pipeline is the normal way to stop; not a traceback.
+        return 0
+    except BrokenPipeError:
+        # The consumer went away (alerter stopped, pager closed). Also normal.
+        try:
+            sys.stdout.close()
+        except OSError:
+            pass
+        return 0
 
     return 0
 

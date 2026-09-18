@@ -38,7 +38,7 @@ One JSON object per line (JSON Lines). Fields:
 | `address` | observed device address |
 | `addr_type` | `public` / `random` |
 | `addr_class` | `public` / `static` / `resolvable` / `non-resolvable` / `unknown` |
-| `tier` | identity confidence: `strong` / `session` / `model` / `ambiguous` |
+| `tier` | identity confidence: `strong` / `session` / `model` per advert; `ambiguous` appears only after the fingerprint tool aggregates sightings and finds too little content to attribute |
 | `identity_key` | the key that decides what is "the same device" across time |
 | `rssi`, `tx_power` | signal fields, or null when absent |
 | `name` | advertised name, if any |
@@ -56,13 +56,27 @@ each observation's own timestamp, and runs the shared `ble_signatures`
 detector over that window on a fixed cadence:
 
 ```bash
-sudo btmon -i hci0 \
-  | ./scripts/ble-observe.py --stream --sensor-id "$SENSOR_ID" \
+sudo ./scripts/ble-live-watch.sh            # until Ctrl+C
+sudo ./scripts/ble-live-watch.sh hci0 300   # bounded run
+```
+
+The wrapper holds an LE scan open around btmon (nothing is reported on an
+idle adapter), line-buffers btmon so alerts are not held back by a full pipe
+buffer, and tees the observations to `logs/obs-<iface>-<stamp>.jsonl` with
+absolute timestamps (`--epoch-base now` pins the base to the first advert's
+arrival). The underlying pipeline is:
+
+```bash
+sudo stdbuf -oL btmon -i hci0 \
+  | ./scripts/ble-observe.py --stream --epoch-base now \
   | ./scripts/ble-live-alert.py --window 30 --interval 5 --profile balanced
 ```
 
 It reaches the same verdict as the batch scanner by construction — both import
 one detector — so a threshold tuned in `config/signatures.conf` changes both.
+The observer takes `SENSOR_ID`, `SENSOR_LAT` and `SENSOR_LON` from
+`config/interfaces.conf` unless the environment or the command line overrides
+them.
 
 ## Sensor net and triangulation (planned)
 
