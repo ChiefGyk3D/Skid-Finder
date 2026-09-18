@@ -78,16 +78,25 @@ The observer takes `SENSOR_ID`, `SENSOR_LAT` and `SENSOR_LON` from
 `config/interfaces.conf` unless the environment or the command line overrides
 them.
 
-## Sensor net and triangulation (planned)
+## Sensor net and triangulation (collector exists; alpha)
 
-The normalized stream is the seam a sensor net plugs into. The intended shape:
+The normalized stream is the seam the sensor net plugs into, and the first
+collector now sits on it:
 
-1. Several sensors each run `ble-observe.py`, stamping their own `sensor_id`
-   and position, and ship JSONL to a collector (start with append-to-shared-
-   file or MQTT; the transport is not the hard part).
-2. The collector groups observations by `identity_key` and, for a given
-   device, has RSSI from several known positions at overlapping times.
-3. From that it can estimate a location.
+1. Several sensors each emit records stamped with their own `sensor_id` and
+   position. The Linux node is `ble-live-watch.sh` with `MQTT_HOST` set,
+   which starts `scripts/ble-publish.py` to tail its files onto the broker;
+   other nodes follow the contract in [sensor-nodes.md](sensor-nodes.md).
+2. `scripts/ble-collector.py` reads them (`--mqtt`, `--watch DIR`, or
+   `--input` files), groups observations by `identity_key`, keeps a median
+   RSSI per sensor over a sliding window, runs the shared detector over
+   each sensor's window, and writes a `fleet-state/1` snapshot plus
+   `fleet-alert/1` records.
+3. For `strong`/`session` identities heard by two or more positioned
+   sensors it estimates a location as an RSSI-weighted centroid, and for a
+   flood it places the source by the event rate each sensor sees. Every
+   estimate carries `spread_m`, the widest distance between the sensors
+   that produced it, as the error bar.
 
 **Read this part honestly before trusting a dot on a map.** RSSI-based
 location indoors is bad. Multipath swings a single reading by 20 dB — the
@@ -105,16 +114,19 @@ math:
   continuously from one radio and do not rotate identity cleanly, which is
   exactly the persistent, high-rate signal multilateration handles best.
 
-A sensible build order, weakest assumptions last:
+The build order, weakest assumptions last, and where it stands:
 
 1. **RSSI heatmap over position** — plot observations at their sensor's
    location (or a moving sensor's GPS track via `scripts/ble-gps-merge.py`).
-   No location math, immediately useful.
-2. **Weighted centroid** — place a device at the RSSI-weighted average of the
-   sensors that hear it. Crude, robust, no calibration.
-3. **Log-distance multilateration** — fit a path-loss model and solve. Needs
-   per-environment calibration and time-synchronised sensors (chrony/NTP), and
-   is the first step whose output can mislead if the caveats above are ignored.
+   No location math. The `fleet-state/1` snapshot carries per-sensor median
+   RSSI per identity, which is the input; no plotter ships yet.
+2. **Weighted centroid** — *implemented in the collector.* A device sits at
+   the RSSI-weighted average of the sensors that hear it (weight
+   10^((rssi+100)/20), roughly inverse free-space distance). Crude, robust,
+   no calibration, error bar stated as `spread_m`.
+3. **Log-distance multilateration** — not implemented. Needs per-environment
+   calibration and is the first step whose output can mislead if the caveats
+   above are ignored. It stays behind hardware validation.
 
 ## Wi-Fi (later)
 
