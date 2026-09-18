@@ -20,6 +20,9 @@ INTERFACES_CONF_KEYS=(
   MQTT_PORT
   MQTT_TLS
   MQTT_TOPIC_PREFIX
+  WIFI_IFACE
+  WIFI_CHANNELS
+  WIFI_DWELL_MS
 )
 
 _assign_conf_value() {
@@ -533,5 +536,140 @@ run_live_pipeline() {
       ;;
   esac
 
+  return 0
+}
+
+# --- Wi-Fi monitor mode -----------------------------------------------------------
+#
+# Passive only. Monitor mode listens; nothing below transmits. The interface
+# state is recorded so it can be put back the way it was found: managed
+# mode, and returned to NetworkManager if NetworkManager had it.
+#
+# tshark field list. Keep in step with scripts/wifi_parse.py FIELDS.
+WIFI_TSHARK_FIELDS=(
+  -e frame.time_epoch
+  -e wlan.fc.type_subtype
+  -e wlan.sa
+  -e wlan.da
+  -e wlan.bssid
+  -e wlan.ssid
+  -e wlan_radio.signal_dbm
+  -e wlan_radio.channel
+  -e wlan.fixed.reason_code
+)
+# Management frames only (type 0); data frames carry people's traffic and the
+# detector does not need them.
+WIFI_TSHARK_FILTER="wlan.fc.type == 0"
+
+WIFI_NM_MANAGED=""
+CHANNEL_HOP_PID=""
+
+wifi_monitor_on() {
+  local iface="$1"
+  WIFI_NM_MANAGED=""
+  if command -v nmcli >/dev/null 2>&1; then
+    if nmcli -t -f GENERAL.STATE device show "${iface}" >/dev/null 2>&1; then
+      WIFI_NM_MANAGED="yes"
+      nmcli device set "${iface}" managed no >/dev/null 2>&1 || true
+    fi
+  fi
+  ip link set "${iface}" down 2>/dev/null || true
+  if ! iw dev "${iface}" set type monitor 2>/dev/null; then
+    echo "warn: could not put ${iface} into monitor mode; the adapter or driver may not support it." >&2
+    echo "warn: see TROUBLESHOOTING.md (Wi-Fi monitor mode)." >&2
+  fi
+  ip link set "${iface}" up 2>/dev/null || true
+}
+
+wifi_monitor_off() {
+  local iface="$1"
+  ip link set "${iface}" down 2>/dev/null || true
+  iw dev "${iface}" set type managed 2>/dev/null || true
+  ip link set "${iface}" up 2>/dev/null || true
+  if [[ "${WIFI_NM_MANAGED}" == "yes" ]] && command -v nmcli >/dev/null 2>&1; then
+    nmcli device set "${iface}" managed yes >/dev/null 2>&1 || true
+  fi
+  WIFI_NM_MANAGED=""
+}
+
+# Hop the interface across channels in the background. A single channel sees
+# one sixth of the 2.4 GHz floor; hopping trades per-channel completeness for
+# coverage, which is the right trade for detection.
+start_channel_hop() {
+  local iface="$1"
+  local channels="${2:-1 6 11}"
+  local dwell_ms="${3:-250}"
+  local dwell
+  dwell="$(awk -v ms="${dwell_ms}" 'BEGIN { printf "%.3f", ms / 1000 }')"
+  (
+    while :; do
+      for ch in ${channels}; do
+        iw dev "${iface}" set channel "${ch}" >/dev/null 2>&1 || true
+        sleep "${dwell}"
+      done
+    done
+  ) &
+  CHANNEL_HOP_PID=$!
+}
+
+stop_channel_hop() {
+  [[ -n "${CHANNEL_HOP_PID}" ]] || return 0
+  kill "${CHANNEL_HOP_PID}" 2>/dev/null || true
+  wait "${CHANNEL_HOP_PID}" 2>/dev/null || true
+  CHANNEL_HOP_PID=""
+}
+
+# Field extract from a saved capture, in the detector's format.
+wifi_fields_from_pcap() {
+  local pcap="$1"
+  tshark -r "${pcap}" -Y "${WIFI_TSHARK_FILTER}" -T fields "${WIFI_TSHARK_FIELDS[@]}" \
+    -E separator=/t -E occurrence=f 2>/dev/null
+}
+
+# Live pipeline: tshark -> wifi-observe.py --stream -> wifi-live-alert.py.
+# Usage: run_wifi_live_pipeline <iface> <duration> <obs_out> [observe args...] -- [alert args...]
+run_wifi_live_pipeline() {
+  local iface="$1"
+  local duration="$2"
+  local obs_out="$3"
+  shift 3
+
+  local observe_args=()
+  local alert_args=()
+  local phase=0
+  while (( $# )); do
+    if [[ "$1" == "--" ]]; then
+      phase=1
+      shift
+      continue
+    fi
+    if (( phase == 0 )); then
+      observe_args+=("$1")
+    else
+      alert_args+=("$1")
+    fi
+    shift
+  done
+
+  local cmd=()
+  if (( duration > 0 )); then
+    cmd+=(timeout "${duration}")
+  fi
+  # -l flushes per packet, the tshark equivalent of stdbuf -oL.
+  cmd+=(tshark -i "${iface}" -l -Y "${WIFI_TSHARK_FILTER}" -T fields "${WIFI_TSHARK_FIELDS[@]}"
+        -E separator=/t -E occurrence=f)
+
+  local rc=0
+  "${cmd[@]}" 2>/dev/null \
+    | python3 "${ROOT_DIR}/scripts/wifi-observe.py" --stream "${observe_args[@]}" \
+    | tee "${obs_out}" \
+    | python3 "${ROOT_DIR}/scripts/wifi-live-alert.py" "${alert_args[@]}" || rc=$?
+
+  case "${rc}" in
+    0|124|130|143) ;;
+    *)
+      echo "warn: Wi-Fi live pipeline on ${iface} exited with status ${rc}." >&2
+      ;;
+  esac
   return 0
 }

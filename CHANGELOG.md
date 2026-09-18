@@ -9,6 +9,34 @@ would break.
 
 ## [Unreleased]
 
+## [0.3.0-alpha.1] — 2026-09-18
+
+Closes milestone [v0.3.0 alpha](https://github.com/ChiefGyk3D/Skid-Finder/milestone/3).
+**Alpha:** the Wi-Fi detector is measured against synthetic traffic only;
+the capture path has not been run on the AC1200 from this project.
+
+### Added
+- Passive Wi-Fi detection: `scripts/wifi-capture.sh` (monitor mode,
+  channel hopping, pcapng + field extract, interface restored on exit),
+  `scripts/wifi-live-watch.sh`, `scripts/wifi-observe.py` (`wifi-obs/1`),
+  `scripts/wifi-signature-scan.py`, `scripts/wifi-live-alert.py`
+  (`wifi-alert/1`), and the detector core `scripts/wifi_signatures.py`
+  with four families: deauthentication/disassociation flood, beacon flood,
+  evil twin, KARMA-style responder. Three profiles, tunable through
+  `config/wifi-signatures.conf`.
+- `scripts/wifi_parse.py` for tshark's field output, tolerant of both
+  subtype spellings and hex-encoded SSIDs.
+- `scripts/sig_config.py`: one rule loader for both detectors.
+- The collector keeps a Wi-Fi window per sensor and judges it with the
+  Wi-Fi detector; the publisher routes `wifi-obs`/`wifi-alert` records.
+- Wi-Fi corpus (`tests/corpus/wifi-manifest.jsonl`) under the same
+  precision/recall gate (`tests/test-detector-metrics.py --modality wifi`),
+  plus `tests/test-wifi-signatures.sh` and `tests/test-wifi-live-watch.sh`.
+- Field menu entries `wifi-capture`, `wifi-live`, `wifi-scan`;
+  `WIFI_IFACE`, `WIFI_CHANNELS`, `WIFI_DWELL_MS` config keys.
+- `docs/wifi-notes.md`: families, records, what to verify on hardware,
+  legal framing. Wi-Fi monitor-mode section in TROUBLESHOOTING.md.
+
 ## [0.2.0-alpha.1] — 2026-09-18
 
 Closes milestone [v0.2.0 alpha](https://github.com/ChiefGyk3D/Skid-Finder/milestone/2).
@@ -93,6 +121,7 @@ this into a beta is in `docs/ROADMAP.md`.
 - Detector false positives on ordinary crowds: rules now key on address
   reuse shape, not on volume or on the random-address ratio.
 
-[Unreleased]: https://github.com/ChiefGyk3D/Skid-Finder/compare/v0.2.0-alpha.1...HEAD
+[Unreleased]: https://github.com/ChiefGyk3D/Skid-Finder/compare/v0.3.0-alpha.1...HEAD
+[0.3.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.3.0-alpha.1
 [0.2.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.2.0-alpha.1
 [0.1.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.1.0-alpha.1

@@ -1,0 +1,21 @@
+# Labeled Wi-Fi detector corpus. Same shape as manifest.jsonl; read by
+# tests/test-detector-metrics.py --modality wifi. Synthetic samples come from
+# tests/make-wifi-fixture.py; real captures (tshark field .tsv, git-ignored
+# under real/) are folded in when present.
+#
+# None of the Wi-Fi thresholds have been measured against a real venue yet.
+# The first real ambient sample recorded here is the baseline the roadmap
+# calls for.
+# --- ambient: a venue's own APs, clients probing, an occasional real deauth --
+{"kind":"synthetic","label":"ambient","mode":"ambient","duration":30,"seed":1}
+{"kind":"synthetic","label":"ambient","mode":"ambient","duration":30,"seed":2}
+{"kind":"synthetic","label":"ambient","mode":"ambient","duration":60,"seed":3}
+{"kind":"synthetic","label":"ambient","mode":"ambient","duration":120,"seed":4}
+# --- spam: the four families --------------------------------------------------
+{"kind":"synthetic","label":"spam","mode":"deauth","duration":30,"seed":1,"families":["deauth"]}
+{"kind":"synthetic","label":"spam","mode":"deauth","duration":30,"rate":12,"seed":2,"families":["deauth"]}
+{"kind":"synthetic","label":"spam","mode":"beacon","duration":30,"seed":1,"families":["beacon"]}
+{"kind":"synthetic","label":"spam","mode":"beacon","duration":30,"rate":10,"seed":2,"families":["beacon"]}
+{"kind":"synthetic","label":"spam","mode":"evil_twin","duration":30,"seed":1,"families":["evil_twin"]}
+{"kind":"synthetic","label":"spam","mode":"karma","duration":30,"seed":1,"families":["karma"]}
+# {"kind":"real","label":"ambient","path":"real/wifi-quiet-office-20260920.tsv","note":"home baseline"}

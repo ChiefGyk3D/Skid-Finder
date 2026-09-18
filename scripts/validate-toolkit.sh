@@ -107,6 +107,7 @@ except OSError as exc:
   check_file "config/interfaces.conf.example"
   check_file "config/aio-features.conf.example"
   check_file "config/signatures.conf.example"
+  check_file "config/wifi-signatures.conf.example"
   check_optional_file "config/interfaces.conf" "copy from config/interfaces.conf.example"
   check_optional_file "config/signatures.conf" "copy from config/signatures.conf.example"
   check_file "tests/test-ble-signature-tuning.sh"
@@ -119,6 +120,10 @@ except OSError as exc:
   check_file "tests/test-versioning.sh"
   check_file "tests/test-sensor-net.sh"
   check_file "tests/make-fleet-fixture.py"
+  check_file "tests/test-wifi-signatures.sh"
+  check_file "tests/test-wifi-live-watch.sh"
+  check_file "tests/make-wifi-fixture.py"
+  check_file "tests/corpus/wifi-manifest.jsonl"
   check_file "tests/make-fixture.py"
   check_file "tests/test-detector-metrics.py"
   check_file "tests/test-ble-observe.sh"
@@ -141,6 +146,14 @@ except OSError as exc:
     scripts/ble-publish.py \
     scripts/ble-collector.py \
     scripts/skid_conf.py \
+    scripts/sig_config.py \
+    scripts/wifi_parse.py \
+    scripts/wifi_signatures.py \
+    scripts/wifi-observe.py \
+    scripts/wifi-signature-scan.py \
+    scripts/wifi-live-alert.py \
+    scripts/wifi-capture.sh \
+    scripts/wifi-live-watch.sh \
     scripts/ble-spam-watch.sh \
     scripts/capture-btmon.sh \
     scripts/foxhunt-rssi.sh \
@@ -158,6 +171,7 @@ except OSError as exc:
 
   check_shell_syntax "tests/test-detector-metrics.py"
   check_shell_syntax "tests/make-fleet-fixture.py"
+  check_shell_syntax "tests/make-wifi-fixture.py"
 
   if command -v python3 >/dev/null 2>&1; then
     record_pass "python3 available"

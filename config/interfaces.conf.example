@@ -48,3 +48,12 @@ MQTT_HOST=""
 MQTT_PORT="1883"
 MQTT_TLS="no"
 MQTT_TOPIC_PREFIX="skidfinder"
+
+# Wi-Fi (passive monitor mode). WIFI_IFACE is the adapter to listen on; on
+# the uConsole + AC1200 the MT7921 usually appears as wlan1 with the CM4's
+# own radio on wlan0. Leave WIFI_IFACE empty on hosts without a monitor-
+# capable adapter. WIFI_CHANNELS is the hop list (2.4 GHz 1 6 11 covers most
+# attack tooling; add 36 40 44 48 for 5 GHz), WIFI_DWELL_MS the time on each.
+WIFI_IFACE=""
+WIFI_CHANNELS="1 6 11"
+WIFI_DWELL_MS="250"
