@@ -35,22 +35,42 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MAKE_FIXTURE = os.path.join(ROOT, "tests", "make-fixture.py")
-SCANNER = os.path.join(ROOT, "scripts", "ble-signature-scan.py")
-MANIFEST = os.path.join(ROOT, "tests", "corpus", "manifest.jsonl")
 CORPUS_DIR = os.path.join(ROOT, "tests", "corpus")
 
-PROFILES = ["conservative", "balanced", "aggressive"]
-
-# Map a scanner MATCH line back to the short family label used in the manifest.
-FAMILY_BY_MATCH = {
-    "Flipper-like Apple popup spam pattern": "flipper",
-    "Marauder-like rotating beacon flood": "marauder",
-    "Fast Pair lure flood pattern": "fastpair",
-    "Generic BLE spam burst": "generic",
-    "Random-address churn flood": "random_churn",
-    "Lure-name rotation burst": "name_rotation",
+# One harness, one gate, per modality. Each entry names the fixture generator,
+# the scanner, the manifest and how a MATCH line maps back to a family label.
+MODALITIES = {
+    "ble": {
+        "fixture": os.path.join(ROOT, "tests", "make-fixture.py"),
+        "scanner": os.path.join(ROOT, "scripts", "ble-signature-scan.py"),
+        "manifest": os.path.join(CORPUS_DIR, "manifest.jsonl"),
+        "families": {
+            "Flipper-like Apple popup spam pattern": "flipper",
+            "Marauder-like rotating beacon flood": "marauder",
+            "Fast Pair lure flood pattern": "fastpair",
+            "Generic BLE spam burst": "generic",
+            "Random-address churn flood": "random_churn",
+            "Lure-name rotation burst": "name_rotation",
+        },
+    },
+    "wifi": {
+        "fixture": os.path.join(ROOT, "tests", "make-wifi-fixture.py"),
+        "scanner": os.path.join(ROOT, "scripts", "wifi-signature-scan.py"),
+        "manifest": os.path.join(CORPUS_DIR, "wifi-manifest.jsonl"),
+        "families": {
+            "Deauthentication/disassociation flood": "deauth",
+            "Beacon flood (fake access points)": "beacon",
+            "Evil twin (one SSID from unrelated hardware)": "evil_twin",
+            "KARMA-style responder (one AP answering for many SSIDs)": "karma",
+        },
+    },
 }
+MAKE_FIXTURE = MODALITIES["ble"]["fixture"]
+SCANNER = MODALITIES["ble"]["scanner"]
+MANIFEST = MODALITIES["ble"]["manifest"]
+FAMILY_BY_MATCH = MODALITIES["ble"]["families"]
+
+PROFILES = ["conservative", "balanced", "aggressive"]
 
 # Gates per profile. Ambient false positives are never acceptable, so the bar
 # is zero for every profile. Recall is allowed to be lower on the conservative
@@ -82,16 +102,17 @@ def materialise(sample, tmpdir):
         return path
 
     if sample["kind"] == "synthetic":
-        name = f"{sample['mode']}-{sample['rate']}-{sample['duration']}-{sample['seed']}.log"
+        name = f"{sample['mode']}-{sample.get('rate', 'default')}-{sample['duration']}-{sample['seed']}.log"
         out = os.path.join(tmpdir, name)
         cmd = [
             sys.executable, MAKE_FIXTURE,
             "--mode", sample["mode"],
             "--duration", str(sample["duration"]),
-            "--rate", str(sample["rate"]),
             "--seed", str(sample["seed"]),
             "--output", out,
         ]
+        if "rate" in sample:
+            cmd += ["--rate", str(sample["rate"])]
         subprocess.run(cmd, check=True)
         return out
 
@@ -118,10 +139,21 @@ def matched_families(capture, profile, empty_conf):
 def describe(sample):
     if sample["kind"] == "real":
         return f"real:{sample['path']}"
-    return f"{sample['mode']}@{sample['rate']}/s×{sample['duration']}s#{sample['seed']}"
+    return f"{sample['mode']}@{sample.get('rate', 'default')}/s×{sample['duration']}s#{sample['seed']}"
 
 
 def main():
+    global MAKE_FIXTURE, SCANNER, MANIFEST, FAMILY_BY_MATCH
+    modality = "ble"
+    if len(sys.argv) >= 3 and sys.argv[1] == "--modality":
+        modality = sys.argv[2]
+    if modality not in MODALITIES:
+        sys.exit(f"unknown modality {modality!r}; choose from {sorted(MODALITIES)}")
+    MAKE_FIXTURE = MODALITIES[modality]["fixture"]
+    SCANNER = MODALITIES[modality]["scanner"]
+    MANIFEST = MODALITIES[modality]["manifest"]
+    FAMILY_BY_MATCH = MODALITIES[modality]["families"]
+    print(f"modality: {modality}")
     samples = read_manifest(MANIFEST)
     with tempfile.TemporaryDirectory() as tmpdir:
         empty_conf = os.path.join(tmpdir, "empty.conf")

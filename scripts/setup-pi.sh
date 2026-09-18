@@ -17,7 +17,10 @@ REQUIRED=(bluez python3 rfkill tmux)
 # installed one at a time and skipped if unavailable, because `apt install`
 # fails as a batch: a single missing package aborts the run and installs
 # nothing, which would otherwise leave the toolkit with no dependencies at all.
-OPTIONAL=(bluez-tools wireless-tools iw tshark)
+# iw and tshark are what the Wi-Fi capture needs; they stay optional so a
+# BLE-only host installs without them, and the Wi-Fi scripts say what is
+# missing when run.
+OPTIONAL=(bluez-tools wireless-tools iw tshark whiptail)
 
 apt update
 

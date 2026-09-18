@@ -101,7 +101,12 @@ GitHub milestones track the same list; issues attach to them.
 ## Cutting a release
 
 Releases are cut from `main`, after the milestone's PRs have merged, so the
-tag points at a commit everyone can check out.
+tag points at a commit everyone can check out. One exception, used for the
+first three alphas: while milestone branches are stacked and waiting for
+review, a pre-release tag may be placed on the milestone branch head whose
+`VERSION` names it, so the milestone is trackable and other projects can pin
+it. Content is what a tag pins, and a squash merge reproduces that content on
+`main`. Beta and later are tagged on `main` only.
 
 1. Set `VERSION`, move the `[Unreleased]` notes in `CHANGELOG.md` under a
    dated heading for that version, and add its link at the bottom. Run

@@ -54,6 +54,8 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ble_parse  # noqa: E402
 import ble_signatures  # noqa: E402
+import wifi_parse  # noqa: E402
+import wifi_signatures  # noqa: E402
 from skid_conf import read_conf, setting, version  # noqa: E402
 
 STATE_SCHEMA = "fleet-state/1"
@@ -94,6 +96,20 @@ def estimate_location(points):
     return (round(lat, 6), round(lon, 6), round(spread, 1), len(pts))
 
 
+def frame_from_obs(event):
+    return wifi_parse.WifiFrame(
+        timestamp=event.get("ts"),
+        subtype=int(event.get("subtype", -1) or -1),
+        sa=str(event.get("address", "") or ""),
+        da=str(event.get("da", "") or ""),
+        bssid=str(event.get("bssid", "") or ""),
+        ssid=str(event.get("name", "") or ""),
+        rssi=event.get("rssi"),
+        channel=event.get("channel"),
+        reason=event.get("reason"),
+    )
+
+
 def record_from_obs(event):
     return ble_parse.AdRecord(
         address=event.get("address", ""),
@@ -121,17 +137,27 @@ class Sensor:
         self.status = None
         self.last_node_alert = None
         self.window = collections.deque()  # (clock, AdRecord)
+        self.wifi_window = collections.deque()  # (clock, WifiFrame)
         self.last_matches = []
         self.last_stats = None
 
     def prune(self, cutoff):
         while self.window and self.window[0][0] < cutoff:
             self.window.popleft()
+        while self.wifi_window and self.wifi_window[0][0] < cutoff:
+            self.wifi_window.popleft()
+
+    @staticmethod
+    def _span(window):
+        if len(window) < 2:
+            return 0.0
+        return window[-1][0] - window[0][0]
 
     def span(self):
-        if len(self.window) < 2:
-            return 0.0
-        return self.window[-1][0] - self.window[0][0]
+        return self._span(self.window)
+
+    def wifi_span(self):
+        return self._span(self.wifi_window)
 
 
 class Identity:
@@ -153,8 +179,9 @@ class Identity:
 
 
 class Fleet:
-    def __init__(self, cfg, window, relative_ok=False):
+    def __init__(self, cfg, window, relative_ok=False, wifi_cfg=None):
         self.cfg = cfg
+        self.wifi_cfg = wifi_cfg
         self.window = window
         self.sensors = {}
         self.identities = {}
@@ -190,7 +217,9 @@ class Fleet:
         sensor_id = str(event.get("sensor_id") or "unknown")
         if schema.startswith("ble-obs/"):
             self.ingest_obs(event, sensor_id, arrival)
-        elif schema.startswith("ble-alert/"):
+        elif schema.startswith("wifi-obs/"):
+            self.ingest_obs(event, sensor_id, arrival, modality="wifi")
+        elif schema.startswith("ble-alert/") or schema.startswith("wifi-alert/"):
             self.ingest_alert(event, sensor_id, arrival)
         elif schema.startswith("sensor-status/"):
             sensor = self.sensor(sensor_id)
@@ -199,7 +228,7 @@ class Fleet:
         else:
             self.unknown += 1
 
-    def ingest_obs(self, event, sensor_id, arrival):
+    def ingest_obs(self, event, sensor_id, arrival, modality="ble"):
         if not event.get("address"):
             self.unknown += 1
             return
@@ -210,7 +239,10 @@ class Fleet:
         sensor.first_seen = clock if sensor.first_seen is None else min(sensor.first_seen, clock)
         sensor.last_seen = clock if sensor.last_seen is None else max(sensor.last_seen, clock)
         sensor.obs_count += 1
-        sensor.window.append((clock, record_from_obs(event)))
+        if modality == "wifi":
+            sensor.wifi_window.append((clock, frame_from_obs(event)))
+        else:
+            sensor.window.append((clock, record_from_obs(event)))
 
         key = str(event.get("identity_key") or ("addr:" + str(event["address"]).lower()))
         ident = self.identities.get(key)
@@ -258,10 +290,24 @@ class Fleet:
             records = [rec for _, rec in sensor.window]
             stats = ble_signatures.build_stats(records, duration=sensor.span()) if records else None
             matches = ble_signatures.evaluate(stats, self.cfg) if stats else []
-            sensor.last_matches = matches
+            # Wi-Fi frames are judged by their own detector over their own
+            # window; the BLE rules mean nothing for 802.11 and vice versa.
+            wifi_frames = [f for _, f in sensor.wifi_window]
+            wifi_stats = None
+            wifi_matches = []
+            if wifi_frames and self.wifi_cfg is not None:
+                wifi_stats = wifi_signatures.build_stats(wifi_frames, duration=sensor.wifi_span())
+                wifi_matches = wifi_signatures.evaluate(wifi_stats, self.wifi_cfg)
+            sensor.last_matches = matches + wifi_matches
             sensor.last_stats = stats
             if matches:
                 matching.append((sensor, stats, matches))
+            elif wifi_matches and wifi_stats is not None:
+                # For placing a flood the event rate is what matters; a Wi-Fi
+                # flood's rate is its frame rate over the window.
+                class _Rate:
+                    event_rate = wifi_stats.total_frames / max(wifi_stats.duration, 0.001)
+                matching.append((sensor, _Rate, wifi_matches))
             sensors_out[sid] = {
                 "lat": sensor.lat, "lon": sensor.lon,
                 "first_seen": sensor.first_seen, "last_seen": sensor.last_seen,
@@ -271,7 +317,8 @@ class Fleet:
                 "window_rate": round(stats.event_rate, 2) if stats else 0.0,
                 "window_unique_ratio": round(stats.unique_ratio, 3) if stats else 0.0,
                 "matches": [{"name": m.name, "confidence": m.confidence, "evidence": m.evidence}
-                            for m in matches],
+                            for m in matches + wifi_matches],
+                "wifi_window_frames": wifi_stats.total_frames if wifi_stats else 0,
                 "node_alert": sensor.last_node_alert,
                 "status": sensor.status,
             }
@@ -490,6 +537,7 @@ def main() -> int:
     parser.add_argument("--interval", type=float, default=5.0, help="seconds between evaluations")
     parser.add_argument("--profile", default="balanced", choices=["conservative", "balanced", "aggressive"])
     parser.add_argument("--config", default=ble_signatures.config_path_default())
+    parser.add_argument("--wifi-config", default=wifi_signatures.config_path_default())
     parser.add_argument("--state", help="write the fleet-state/1 snapshot here after each evaluation")
     parser.add_argument("--alerts-out", help="append fleet-alert/1 records here")
     parser.add_argument("--from-now", action="store_true",
@@ -502,7 +550,8 @@ def main() -> int:
     args = parser.parse_args()
 
     cfg = ble_signatures.load_config(args.profile, args.config)
-    fleet = Fleet(cfg, args.window, relative_ok=args.relative_ok)
+    wifi_cfg = wifi_signatures.load_config(args.profile, args.wifi_config)
+    fleet = Fleet(cfg, args.window, relative_ok=args.relative_ok, wifi_cfg=wifi_cfg)
     alerts_handle = open(args.alerts_out, "a", encoding="utf-8") if args.alerts_out else None
     if args.state:
         directory = os.path.dirname(os.path.abspath(args.state))

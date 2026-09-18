@@ -377,6 +377,24 @@ schema and how this becomes the foundation for a triangulating sensor net,
 and [docs/siem-ingestion.md](docs/siem-ingestion.md) for the `ble-alert/1`
 record the live watcher writes and how to ship both files to a SIEM.
 
+### 3e) Wi-Fi: deauth floods, fake APs, evil twins, KARMA responders
+
+The same shape for 802.11, passive only:
+
+```bash
+sudo ./scripts/wifi-capture.sh wlan1 60                   # capture + field extract to logs/
+python3 scripts/wifi-signature-scan.py --input logs/wifi-wlan1-<stamp>.tsv
+sudo ./scripts/wifi-live-watch.sh wlan1                   # live alerts, wifi-obs/1 + wifi-alert/1 records
+```
+
+Set `WIFI_IFACE` (on the uConsole + AC1200 usually `wlan1`) and the hop list
+in `config/interfaces.conf`. The wrappers put the adapter in monitor mode,
+hop channels, and restore it on exit. Records carry the same envelope as the
+BLE ones, so the collector, publisher and SIEM path handle both. Families,
+caveats and what must be verified on hardware are in
+[docs/wifi-notes.md](docs/wifi-notes.md). None of the Wi-Fi thresholds have
+been baselined on a real venue yet.
+
 ### 3d) Sensor net: several nodes, one collector
 
 Set `MQTT_HOST` (and the rest of the `MQTT_*` keys) in
@@ -695,16 +713,18 @@ intended Wazuh/OpenSearch path are in
 [docs/siem-ingestion.md](docs/siem-ingestion.md); no shipper configuration has
 been exercised end to end from this toolkit yet, and there is no dashboard.
 
-### Wi-Fi attack detection and fingerprinting (planned)
+### Wi-Fi attack detection (alpha: synthetic-only thresholds, unrun on the AC1200)
 
-The `modality` field and the module split (`ble_parse`, `ble_identity`,
-`ble_signatures`) exist so a Wi-Fi capture frontend can emit the same record
-shape and reuse the collector, identity tiers, and alerting. Detection would
-mirror the BLE families — deauth/disassoc floods, beacon floods,
-evil-twin/karma/known-beacon patterns — and fingerprinting would key on
-probe-request SSID lists and tagged-parameter order rather than the MAC, since
-modern clients randomise probe MACs. As with BLE, it stays passive: detection
-only, never transmit.
+`scripts/wifi-capture.sh`, `wifi-live-watch.sh`, `wifi-observe.py`,
+`wifi-signature-scan.py` and `wifi-live-alert.py` detect deauth/disassoc
+floods, beacon floods, evil twins and KARMA-style responders from a
+monitor-mode capture and emit `wifi-obs/1` / `wifi-alert/1` records the
+collector and publisher already carry. The thresholds are measured against
+synthetic traffic only; the capture path has not been run on the MT7921
+under the AIO v2 kernel from this project; and two tshark field
+representations are handled by heuristic (see docs/wifi-notes.md). Probe-
+request fingerprinting of randomised clients is not implemented. Passive
+only: detection, never transmit.
 
 ### Tooling
 
