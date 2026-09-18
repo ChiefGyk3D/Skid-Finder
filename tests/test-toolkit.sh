@@ -30,5 +30,6 @@ python3 "${ROOT_DIR}/tests/test-detector-metrics.py"
 "${ROOT_DIR}/tests/test-capture-progress.sh"
 "${ROOT_DIR}/tests/test-le-scan-enable.sh"
 "${ROOT_DIR}/tests/test-config-parsing.sh"
+"${ROOT_DIR}/tests/test-field-menu.sh"
 
 echo "Toolkit validation smoke test passed."

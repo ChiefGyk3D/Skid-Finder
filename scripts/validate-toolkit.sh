@@ -112,6 +112,7 @@ except OSError as exc:
   check_file "tests/test-capture-resilience.sh"
   check_file "tests/test-le-scan-enable.sh"
   check_file "tests/test-config-parsing.sh"
+  check_file "tests/test-field-menu.sh"
   check_file "tests/make-fixture.py"
   check_file "tests/test-detector-metrics.py"
   check_file "tests/test-ble-observe.sh"
@@ -139,6 +140,7 @@ except OSError as exc:
     scripts/aio-feature-profile.sh \
     scripts/set-adapter-mode.sh \
     scripts/add-corpus-sample.sh \
+    scripts/skid-finder.sh \
     scripts/troubleshoot-bluetooth.sh \
     scripts/diagnose-mediatek-ac1200.sh \
     scripts/validate-toolkit.sh; do

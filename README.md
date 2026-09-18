@@ -177,6 +177,28 @@ Mode behavior:
 
 ## Usage
 
+### 0) The field menu
+
+Everything below is a script with positional arguments, which is a poor fit
+for a uConsole used one-handed, standing up. The menu covers the common paths
+so nothing has to be typed from memory:
+
+```bash
+./scripts/skid-finder.sh
+```
+
+It only builds command lines. Each action shows the exact command before it
+runs, every action is reachable without the menu, and as a normal user only
+the radio actions are prefixed with `sudo`, so analysis artifacts such as
+`logs/sightings.json` stay owned by you. It uses `whiptail`, which Raspberry
+Pi OS already ships. For scripting or when there is no terminal:
+
+```bash
+./scripts/skid-finder.sh --list                 # actions and their arguments
+./scripts/skid-finder.sh --print field hci0 120 # show the command, run nothing
+./scripts/skid-finder.sh --run watch            # run one action and exit
+```
+
 ### 1) Detection sweep
 
 ```bash
@@ -405,7 +427,7 @@ Run the full local validation suite before a field session:
 ./tests/test-toolkit.sh
 ```
 
-This checks shell syntax for the toolkit scripts, runs `shellcheck` and `ruff` when they are installed, confirms the example config files exist, exercises the signature, fingerprint, GPS-merge, normalized-observation and live-watch regression tests, measures detector false-positive rate and recall against the labeled corpus, verifies the capture pipeline survives its own timeout, and writes a timestamped report under `logs/`.
+This checks shell syntax for the toolkit scripts, runs `shellcheck` and `ruff` when they are installed, confirms the example config files exist, exercises the signature, fingerprint, GPS-merge, normalized-observation, live-watch and field-menu regression tests, measures detector false-positive rate and recall against the labeled corpus, verifies the capture pipeline survives its own timeout, and writes a timestamped report under `logs/`.
 
 The same suite runs in CI on every push and pull request. To match CI locally, install `shellcheck`:
 
@@ -601,18 +623,14 @@ uses built-in thresholds, and a match is a lead worth investigating rather than
 a verdict. Prefer your own `config/signatures.conf` over the shipped defaults
 once you have measured your environment.
 
-### Everything is driven from the command line (planned TUI)
+### The field menu has not been used on the uConsole yet
 
-Setup and operation currently mean remembering script names, argument order,
-and which interface to pass. That is a poor fit for the uConsole, which is
-often used one-handed, standing up, on a small screen. A menu-driven front end
-is planned to cover adapter selection, setup, the field run, spam watch, and
-foxhunt, so the common paths do not have to be typed from memory.
-
-The likely approach is `whiptail` or `dialog`, which are already present on
-Raspberry Pi OS and add no runtime dependency, rather than a Python `curses`
-application. The scripts stay the interface underneath either way; the menu
-would only build the command line, so nothing becomes menu-only.
+`scripts/skid-finder.sh` covers setup, adapter mode, health and recovery, the
+sweep, field run, capture, foxhunt, fingerprinting and signature scans. Its
+command building is tested (`tests/test-field-menu.sh`), but the `whiptail`
+screens have only been exercised on a laptop. Sizing and flow on the uConsole's
+1280x480 display are unverified; if a dialog is cut off or a prompt is in the
+wrong order, that is a bug worth reporting with the screen size.
 
 ### Other open items
 
