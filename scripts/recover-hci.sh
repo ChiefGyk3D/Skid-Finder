@@ -110,7 +110,7 @@ echo "Running post-recovery diagnostics..."
 post_info="$(run_diag "after")"
 
 {
-  echo "# uConsole BLE Recovery Summary"
+  echo "# Skid Finder BLE Recovery Summary"
   echo "generated_at=$(date -Is)"
   echo "interface=${IFACE}"
   echo

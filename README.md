@@ -1,12 +1,14 @@
-# uConsole BLE Spam Detector + Foxhunt Toolkit
+# Skid Finder
 
-Defensive BLE monitoring toolkit for conference environments (DEF CON, BSides) using ClockworkPi uConsole.
+Defensive BLE monitoring toolkit for conference environments (DEF CON, BSides). Skid Finder detects scripted BLE spam and flood tooling — the kind run by "skids" — and lets you foxhunt the source. It is optimized for the ClockworkPi uConsole but runs on other Linux devices too.
 
-Primary configuration target:
-- uConsole with AIO v2
+Skid Finder started out focused on a single rig — the ClockworkPi uConsole paired with the HackerGadgets AIO v2 — and has since expanded to run on more hardware. The longer-term goal is to grow it into a distributed sensor net, with multiple cooperating nodes monitoring an environment together rather than a single hand-carried device.
 
-Secondary configuration target:
-- Other Linux devices (laptops, mini PCs, SBCs) on a best-effort basis
+Hardware support:
+- **Optimized for** the ClockworkPi uConsole with AIO v2 — the defaults, docs, and field workflow are all tuned for this rig.
+- **Runs on** any Linux device with a compatible Bluetooth adapter (laptops, mini PCs, SBCs). The same scripts work here; you just supply your own adapter and interface config.
+
+uConsole-specific behavior (AIO feature profiles, dual-adapter assumptions) is layered on top and stays out of the way on other hardware, so nothing here is uConsole-only.
 
 This toolkit is designed for a dual-adapter setup:
 - CM4 built-in Bluetooth (usually `hci0`) for broad monitoring
@@ -67,6 +69,8 @@ This toolkit is optimized for uConsole with AIO v2. Optional USB-C expansion ada
 - **AC1200 USB-C Wi-Fi Card** (MediaTek MT7921AUN): Dual Bluetooth adapter for parallel capture/hunt workflows; passive BLE 5.2 monitoring + active WiFi 6E connectivity; swappable IPEX antennas.
 - **Dual-adapter mode** leverages hci0 (internal) for continuous capture and hci1 (AC1200 external) for live target tracking, or fallback to single-adapter on compatible hardware.
 
+The uConsole rig is what everything is tuned around, but it is not required. Any Linux machine with one or more BlueZ-compatible HCI adapters will run the same capture, signature, and foxhunt workflows — a single built-in adapter is enough to get started, and a second USB adapter unlocks dual-adapter mode on any host.
+
 ## Install (Raspberry Pi OS / Debian)
 
 ### Prerequisite: install the AIO v2 support first
@@ -103,8 +107,8 @@ Already running the AIO v2 support? Nothing to redo; carry straight on.
 Primary path (uConsole + AIO v2):
 
 ```bash
-git clone https://github.com/ChiefGyk3D/Uconsole-BLE-Stalker.git
-cd Uconsole-BLE-Stalker
+git clone https://github.com/ChiefGyk3D/Skid-Finder.git
+cd Skid-Finder
 sudo ./scripts/setup-pi.sh
 ```
 
@@ -508,7 +512,7 @@ tar -czf ~/field-archives/ble-$(date +%Y%m%d-%H%M%S).tgz logs/
 ```bash
 git init
 git add .
-git commit -m "Initial uConsole BLE spam detector and foxhunt toolkit"
+git commit -m "Initial Skid Finder BLE spam detector and foxhunt toolkit"
 ```
 
 ## Troubleshooting
