@@ -9,6 +9,12 @@ would break.
 
 ## [Unreleased]
 
+### Added
+- `docs/post-1.0-direction.md`: the post-1.0 tracks (Wi-Fi parity with
+  BLE, LoRa/Meshtastic, other radios, enterprise defence and foxhunting),
+  each with what is passively detectable, its honest limit, and what it
+  needs; linked from the roadmap and README, tracked as milestones 6–9.
+
 ## [0.3.0-alpha.1] — 2026-09-18
 
 Closes milestone [v0.3.0 alpha](https://github.com/ChiefGyk3D/Skid-Finder/milestone/3).
