@@ -586,10 +586,19 @@ MediaTek AC1200-specific diagnostic report:
 - Signature matches are heuristic and defensive, not attribution-grade proof of a specific tool.
 - Coverage is strong for common scripted BLE spam patterns but not exhaustive for every custom payload seen during Hacker Summer Camp.
 
+## Versions and stages
+
+The current version is in `VERSION` (`./scripts/skid-finder.sh --version`
+prints it). Versions, the alpha/beta/rc/stable stages and what has to be
+measured before each label is used are defined in
+[docs/ROADMAP.md](docs/ROADMAP.md); every release is recorded in
+[CHANGELOG.md](CHANGELOG.md) and tagged. Anything at `0.x-alpha` is green in
+CI but not yet confirmed on the uConsole hardware.
+
 ## Known Limitations and Roadmap
 
 Open work, kept here rather than in a tracker so the caveats travel with the
-tool.
+tool. The milestone view of the same list is [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ### Detector thresholds are measured, but not yet against real quiet RF
 
