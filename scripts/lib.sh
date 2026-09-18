@@ -13,6 +13,9 @@ INTERFACES_CONF_KEYS=(
   HUNT_HCI
   SCAN_SECONDS
   ALERT_ADS_PER_ADDR
+  SENSOR_ID
+  SENSOR_LAT
+  SENSOR_LON
 )
 
 _assign_conf_value() {
@@ -459,4 +462,72 @@ stop_capture_progress() {
   kill "${CAPTURE_PROGRESS_PID}" 2>/dev/null || true
   wait "${CAPTURE_PROGRESS_PID}" 2>/dev/null || true
   CAPTURE_PROGRESS_PID=""
+}
+
+# Live pipeline: btmon -> ble-observe.py --stream -> ble-live-alert.py.
+#
+# The documented "sudo btmon | ble-observe | ble-live-alert" one-liner has two
+# field failures that this helper exists to remove. First, btmon alone records
+# nothing on an idle adapter, exactly as for the batch captures, so the caller
+# must hold an LE scan open around it. Second, btmon block-buffers its stdout
+# when it is a pipe, so in a quiet room an alert could sit in a 4 KB buffer
+# for minutes; 'stdbuf -oL' makes every advert reach the detector as it lands.
+#
+# The normalized stream is tee'd to <obs_out> so the run leaves a machine-
+# readable artifact (one JSON object per advert) beside the btsnoop trace.
+# Pass /dev/null to discard it. A <duration> of 0 runs until interrupted.
+#
+# Usage: run_live_pipeline <iface> <duration> <trace|""> <obs_out> \
+#            [observe args...] -- [alert args...]
+run_live_pipeline() {
+  local iface="$1"
+  local duration="$2"
+  local trace="$3"
+  local obs_out="$4"
+  shift 4
+
+  local observe_args=()
+  local alert_args=()
+  local phase=0
+  while (( $# )); do
+    if [[ "$1" == "--" ]]; then
+      phase=1
+      shift
+      continue
+    fi
+    if (( phase == 0 )); then
+      observe_args+=("$1")
+    else
+      alert_args+=("$1")
+    fi
+    shift
+  done
+
+  local cmd=()
+  if (( duration > 0 )); then
+    cmd+=(timeout "${duration}")
+  fi
+  cmd+=(stdbuf -oL btmon -i "${iface}")
+  if [[ -n "${trace}" ]]; then
+    cmd+=(-w "${trace}")
+  fi
+
+  local rc=0
+  "${cmd[@]}" 2>/dev/null \
+    | python3 "${ROOT_DIR}/scripts/ble-observe.py" --stream "${observe_args[@]}" \
+    | tee "${obs_out}" \
+    | python3 "${ROOT_DIR}/scripts/ble-live-alert.py" "${alert_args[@]}" || rc=$?
+
+  case "${rc}" in
+    0|124|130|143)
+      # 0 = clean exit, 124 = timeout reached, 130 = Ctrl+C, 143 = SIGTERM.
+      :
+      ;;
+    *)
+      echo "warn: live pipeline on ${iface} exited with status ${rc}." >&2
+      echo "warn: results may be incomplete. See TROUBLESHOOTING.md." >&2
+      ;;
+  esac
+
+  return 0
 }

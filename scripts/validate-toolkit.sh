@@ -113,6 +113,10 @@ except OSError as exc:
   check_file "tests/test-le-scan-enable.sh"
   check_file "tests/test-config-parsing.sh"
   check_file "tests/make-fixture.py"
+  check_file "tests/test-detector-metrics.py"
+  check_file "tests/test-ble-observe.sh"
+  check_file "tests/test-ble-live-watch.sh"
+  check_file "tests/corpus/manifest.jsonl"
   check_file "tests/test-toolkit.sh"
 
   for script in \
@@ -120,8 +124,13 @@ except OSError as exc:
     scripts/detect-hci.sh \
     scripts/setup-linux.sh \
     scripts/ble_parse.py \
+    scripts/ble_identity.py \
+    scripts/ble_signatures.py \
     scripts/ble-fingerprint.py \
     scripts/ble-signature-scan.py \
+    scripts/ble-observe.py \
+    scripts/ble-live-alert.py \
+    scripts/ble-live-watch.sh \
     scripts/ble-spam-watch.sh \
     scripts/capture-btmon.sh \
     scripts/foxhunt-rssi.sh \
@@ -129,11 +138,14 @@ except OSError as exc:
     scripts/ble-field-run.sh \
     scripts/aio-feature-profile.sh \
     scripts/set-adapter-mode.sh \
+    scripts/add-corpus-sample.sh \
     scripts/troubleshoot-bluetooth.sh \
     scripts/diagnose-mediatek-ac1200.sh \
     scripts/validate-toolkit.sh; do
     check_shell_syntax "${script}"
   done
+
+  check_shell_syntax "tests/test-detector-metrics.py"
 
   if command -v python3 >/dev/null 2>&1; then
     record_pass "python3 available"
@@ -155,6 +167,16 @@ except OSError as exc:
     fi
   else
     record_warn "shellcheck not installed; static analysis skipped"
+  fi
+
+  if command -v ruff >/dev/null 2>&1; then
+    if ruff check "${ROOT_DIR}"/scripts/*.py "${ROOT_DIR}"/tests/*.py >/dev/null 2>&1; then
+      record_pass "ruff clean (ruff.toml ruleset)"
+    else
+      record_warn "ruff findings in Python (run: ruff check scripts/*.py tests/*.py)"
+    fi
+  else
+    record_warn "ruff not installed; Python static analysis skipped"
   fi
 
   echo

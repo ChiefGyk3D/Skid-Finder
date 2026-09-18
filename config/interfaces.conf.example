@@ -27,3 +27,13 @@ SCAN_SECONDS="30"
 
 # Alert threshold: advertisements per sender in one scan window.
 ALERT_ADS_PER_ADDR="40"
+
+# Sensor identity. Every normalized observation (scripts/ble-observe.py) is
+# stamped with these so captures from several devices can be told apart and,
+# eventually, combined for triangulation. SENSOR_ID should be unique per
+# device; SENSOR_LAT/SENSOR_LON are this sensor's fixed position in decimal
+# degrees when it is stationary, or left blank for a device that moves (a
+# per-observation GPS track is merged separately by scripts/ble-gps-merge.py).
+SENSOR_ID="uconsole-01"
+SENSOR_LAT=""
+SENSOR_LON=""

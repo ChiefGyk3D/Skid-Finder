@@ -33,8 +33,14 @@ jobs:
       - name: Make scripts executable
         run: chmod +x scripts/*.sh tests/*.sh
 
+      - name: Install ruff
+        run: pip install ruff
+
       - name: Run shellcheck
         run: shellcheck -S warning -x scripts/*.sh tests/*.sh
+
+      - name: Run ruff
+        run: ruff check scripts/*.py tests/*.py
 
       - name: Run test suite
         run: ./tests/test-toolkit.sh

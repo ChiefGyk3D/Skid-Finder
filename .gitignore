@@ -29,3 +29,8 @@ config/aio-features.conf
 # A watchlist holds addresses and names of other people's devices. Never commit it.
 config/watchlist.conf
 config/*.bak-*
+
+# Operator-provided real captures for the detector corpus (privacy + size).
+tests/corpus/real/*
+!tests/corpus/real/README.md
+!tests/corpus/real/.gitkeep

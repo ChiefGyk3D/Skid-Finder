@@ -311,6 +311,50 @@ To supply targets yourself:
 sudo ./scripts/foxhunt-rssi.sh --targets targets.txt
 ```
 
+### 3c) Normalized observations and live alerting
+
+The capture-then-analyze scripts judge a log only after the run finishes. For
+live alerting, for combining several sensors, and as the shared shape a future
+Wi-Fi frontend will reuse, captures can be emitted as normalized JSON Lines,
+one object per advertising report, stamped with which sensor saw it:
+
+```bash
+# Alert on spam live. Runs until Ctrl+C; give a duration in seconds to bound it.
+sudo ./scripts/ble-live-watch.sh
+sudo ./scripts/ble-live-watch.sh hci0 120 aggressive
+
+# Convert a finished capture to a normalized stream.
+./scripts/ble-observe.py --input logs/capture.log --out logs/obs.jsonl
+```
+
+`ble-live-watch.sh` enables an LE scan on the radio for the run (btmon alone
+records nothing on an idle adapter), line-buffers btmon so each advert reaches
+the detector as it lands, and leaves two artifacts behind: the `.btsnoop`
+trace and `logs/obs-<iface>-<timestamp>.jsonl`, one record per advert with
+absolute timestamps. `ble-field-run.sh` writes the same `obs-*.jsonl` beside
+its summary, so every capture already produces the file a collector or SIEM
+ingests.
+
+The live alerter runs the *same* detector as the batch scanner over a sliding
+window, so a threshold tuned in `config/signatures.conf` changes both. Set
+`SENSOR_ID`, and optionally `SENSOR_LAT`/`SENSOR_LON`, in
+`config/interfaces.conf` so every observation is attributable to a sensor;
+the observer reads them from there, and the environment overrides the file.
+
+Under the hood the wrapper runs this pipeline, which you can assemble yourself
+if you need to (the LE scan is the part that is easy to forget):
+
+```bash
+sudo stdbuf -oL btmon -i hci0 \
+  | ./scripts/ble-observe.py --stream --epoch-base now \
+  | ./scripts/ble-live-alert.py --window 30 --interval 5 --profile balanced
+```
+
+See [docs/sensor-net-notes.md](docs/sensor-net-notes.md) for the `ble-obs/1`
+schema and how this becomes the foundation for a triangulating sensor net,
+and [docs/siem-ingestion.md](docs/siem-ingestion.md) for the `ble-alert/1`
+record the live watcher writes and how to ship both files to a SIEM.
+
 ### 4) Dual-pane session
 
 ```bash
@@ -327,7 +371,8 @@ sudo ./scripts/ble-field-run.sh
 ```
 
 Outputs:
-- `logs/btmon-<iface>-<timestamp>.log`
+- `logs/btmon-<iface>-<timestamp>.log` and `.btsnoop`
+- `logs/obs-<iface>-<timestamp>.jsonl` (normalized observations, see 3c)
 - `logs/summary-<iface>-<timestamp>.txt`
 
 The summary now includes a signature scan section based on the captured `btmon` log.
@@ -360,7 +405,7 @@ Run the full local validation suite before a field session:
 ./tests/test-toolkit.sh
 ```
 
-This checks shell syntax for the toolkit scripts, runs `shellcheck` when it is installed, confirms the example config files exist, exercises the signature and GPS-merge regression tests, verifies the capture pipeline survives its own timeout, and writes a timestamped report under `logs/`.
+This checks shell syntax for the toolkit scripts, runs `shellcheck` and `ruff` when they are installed, confirms the example config files exist, exercises the signature, fingerprint, GPS-merge, normalized-observation and live-watch regression tests, measures detector false-positive rate and recall against the labeled corpus, verifies the capture pipeline survives its own timeout, and writes a timestamped report under `logs/`.
 
 The same suite runs in CI on every push and pull request. To match CI locally, install `shellcheck`:
 
@@ -524,30 +569,37 @@ MediaTek AC1200-specific diagnostic report:
 Open work, kept here rather than in a tracker so the caveats travel with the
 tool.
 
-### Detector thresholds are not yet baselined against quiet RF (planned)
+### Detector thresholds are measured, but not yet against real quiet RF
 
-Every threshold in `scripts/ble-signature-scan.py` was measured during Hacker
-Summer Camp 2026, on the BSidesLV floor at the Tuscany. That environment is
-both far denser than normal and genuinely full of BLE spam, so a clean ambient
-sample was never available while the numbers were being set. The thresholds
-are workable and they no longer fire on ordinary conference traffic, but
-"does not fire in a hostile environment" is a weaker claim than "fires only on
-hostile traffic". Both directions still need confirming somewhere quiet.
+Every threshold in the detector was set during Hacker Summer Camp 2026, on the
+BSidesLV floor at the Tuscany. That environment is both far denser than normal
+and genuinely full of BLE spam, so a clean ambient sample was never available
+while the numbers were being set. The thresholds are workable and they no
+longer fire on ordinary conference traffic, but "does not fire in a hostile
+environment" is a weaker claim than "fires only on hostile traffic".
 
-The scanner prints a note to stderr whenever it falls back to built-in
-thresholds, for exactly this reason.
+What now exists to close this:
 
-Planned follow-up, after the conference week:
+- A labeled corpus and a metrics harness, `tests/test-detector-metrics.py`,
+  which runs the detector across every sample for every profile and reports
+  false-positive rate and recall. It fails the build if ambient traffic
+  matches anything or spam recall drops. This is a regression guard, not just a
+  report, and it runs in CI.
+- A committed slot for **your own real captures** under `tests/corpus/real/`
+  (git-ignored for privacy and size). Record one with
+  `scripts/add-corpus-sample.sh --label ambient --capture <log> --run` and the
+  same harness measures the detector against real quiet RF instead of only
+  synthetic traffic. See `tests/corpus/real/README.md`.
+- The recall side needs real hostile traffic, which a quiet baseline cannot
+  provide. To produce one safely, capture your own Flipper Zero's BLE spam in a
+  contained environment and record it with `--label spam`. See
+  [docs/flipper-spam-capture.md](docs/flipper-spam-capture.md).
 
-1. Capture 20-30s of ordinary ambient traffic somewhere quiet.
-2. Confirm the scan produces no match. Raise any threshold that trips.
-3. Re-run the retained conference captures to confirm the adjustment did not
-   simply blind the detector.
-4. Record both baselines so future tuning has a fixed reference.
-
-Until then, treat a match as a lead worth investigating rather than a verdict,
-and prefer your own `config/signatures.conf` over the shipped defaults once you
-have measured your environment.
+The remaining gap is the one only hardware can close: capturing that real quiet
+baseline. Until you have, the scanner still prints a stderr note whenever it
+uses built-in thresholds, and a match is a lead worth investigating rather than
+a verdict. Prefer your own `config/signatures.conf` over the shipped defaults
+once you have measured your environment.
 
 ### Everything is driven from the command line (planned TUI)
 
@@ -570,8 +622,48 @@ would only build the command line, so nothing becomes menu-only.
   and timing, which is not implemented.
 - Signature coverage targets common scripted spam. Custom payloads are not
   exhaustively covered.
-- Only the shell code is linted in CI. The Python is exercised by the test
-  suite but not statically checked.
+
+### Sensor net and triangulation (planned foundation in place)
+
+The normalized observation stream (`scripts/ble-observe.py`, schema
+`ble-obs/1`) and the live alerter (`scripts/ble-live-alert.py`) are the seam a
+multi-sensor net plugs into: several sensors emitting the same stamped records
+to a collector that groups by identity and estimates location.
+
+The honest caveat, recorded in [docs/sensor-net-notes.md](docs/sensor-net-notes.md):
+RSSI-based location indoors is coarse (multipath swings readings by 20 dB), and
+you can only triangulate an identity that persists across sensors — a `strong`
+or `session` tier device, or a spam source that transmits continuously. A
+`model`/`ambiguous` tier target is a product, possibly several people, and
+triangulating it triangulates a crowd. The collector, transport, and location
+math are not yet implemented; the data model they need is.
+
+### SIEM and dashboards (records exist, pipeline untested)
+
+Live runs write `logs/alerts-<iface>-<stamp>.jsonl`, one `ble-alert/1`
+record per detector evaluation, beside the `ble-obs/1` observation file. Both
+are JSON Lines a log shipper can pick up as-is. The record shapes and the
+intended Wazuh/OpenSearch path are in
+[docs/siem-ingestion.md](docs/siem-ingestion.md); no shipper configuration has
+been exercised end to end from this toolkit yet, and there is no dashboard.
+
+### Wi-Fi attack detection and fingerprinting (planned)
+
+The `modality` field and the module split (`ble_parse`, `ble_identity`,
+`ble_signatures`) exist so a Wi-Fi capture frontend can emit the same record
+shape and reuse the collector, identity tiers, and alerting. Detection would
+mirror the BLE families — deauth/disassoc floods, beacon floods,
+evil-twin/karma/known-beacon patterns — and fingerprinting would key on
+probe-request SSID lists and tagged-parameter order rather than the MAC, since
+modern clients randomise probe MACs. As with BLE, it stays passive: detection
+only, never transmit.
+
+### Tooling
+
+Both the shell and the Python are now statically checked in CI: `shellcheck`
+for the scripts, `ruff` for the Python (ruleset in `ruff.toml`). The detector's
+behaviour is additionally measured, not just exercised, by
+`tests/test-detector-metrics.py`.
 
 ## Contributing
 
@@ -583,8 +675,9 @@ include the output of:
 ./tests/test-toolkit.sh
 ```
 
-Please run `shellcheck -S warning -x scripts/*.sh tests/*.sh` before opening a
-pull request; CI enforces the same check.
+Please run `shellcheck -S warning -x scripts/*.sh tests/*.sh` and
+`ruff check scripts/*.py tests/*.py` before opening a pull request; CI enforces
+both.
 
 ## License
 
