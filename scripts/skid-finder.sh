@@ -13,6 +13,7 @@ set -euo pipefail
 # OS already ships it; nothing else is required.
 #
 # Non-interactive use (also what the tests exercise):
+#   scripts/skid-finder.sh --version                 the toolkit version
 #   scripts/skid-finder.sh --list                    actions and their arguments
 #   scripts/skid-finder.sh --print <action> [args]   print the command, run nothing
 #   scripts/skid-finder.sh --run   <action> [args]   run one action and exit
@@ -287,6 +288,14 @@ interactive() {
 }
 
 case "${1:-}" in
+  --version)
+    if [[ -r "${ROOT_DIR}/VERSION" ]]; then
+      printf 'skid-finder %s\n' "$(tr -d '[:space:]' < "${ROOT_DIR}/VERSION")"
+    else
+      echo "skid-finder (unversioned checkout: VERSION file missing)" >&2
+      exit 1
+    fi
+    ;;
   --list)
     list_actions
     ;;

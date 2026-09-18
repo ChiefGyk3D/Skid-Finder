@@ -99,6 +99,9 @@ except OSError as exc:
   echo
 
   check_file "README.md"
+  check_file "VERSION"
+  check_file "CHANGELOG.md"
+  check_file "docs/ROADMAP.md"
   check_file "TROUBLESHOOTING.md"
   check_file "LICENSE"
   check_file "config/interfaces.conf.example"
@@ -113,6 +116,7 @@ except OSError as exc:
   check_file "tests/test-le-scan-enable.sh"
   check_file "tests/test-config-parsing.sh"
   check_file "tests/test-field-menu.sh"
+  check_file "tests/test-versioning.sh"
   check_file "tests/make-fixture.py"
   check_file "tests/test-detector-metrics.py"
   check_file "tests/test-ble-observe.sh"
