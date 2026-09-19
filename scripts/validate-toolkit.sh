@@ -119,6 +119,10 @@ except OSError as exc:
   check_file "tests/test-field-menu.sh"
   check_file "tests/test-versioning.sh"
   check_file "tests/test-unprivileged-capture.sh"
+  check_file "tests/test-systemd-units.sh"
+  check_file "systemd/skid-finder-sensor@.service"
+  check_file "systemd/skid-finder-collector.service"
+  check_file "systemd/skid-finder-retention.timer"
   check_file "tests/test-sensor-net.sh"
   check_file "tests/make-fleet-fixture.py"
   check_file "tests/test-wifi-signatures.sh"
@@ -162,6 +166,7 @@ except OSError as exc:
     scripts/ble-field-run.sh \
     scripts/aio-feature-profile.sh \
     scripts/set-adapter-mode.sh \
+    scripts/retention-sweep.sh \
     scripts/add-corpus-sample.sh \
     scripts/skid-finder.sh \
     scripts/troubleshoot-bluetooth.sh \
