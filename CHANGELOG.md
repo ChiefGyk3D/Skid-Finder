@@ -9,6 +9,16 @@ would break.
 
 ## [Unreleased]
 
+### Added
+- `./scripts/skid-finder.sh --doctor` (and the `doctor` menu entry): tools,
+  privileges (including whether the unprivileged BLE route works here),
+  adapters, Wi-Fi interface and monitor-mode capability, default-route
+  warning, config files, root-owned logs. Every miss carries its fix.
+
+### Changed
+- The menu prefixes `sudo` on BLE actions only when the unprivileged
+  capture route is unavailable; Wi-Fi and AIO actions always get it.
+
 ## [0.4.0-alpha.1] — 2026-09-18
 
 **Alpha.** The laptop paths below were exercised on real hardware (a
