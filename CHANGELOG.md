@@ -10,6 +10,16 @@ would break.
 ## [Unreleased]
 
 ### Added
+- `systemd/`: `skid-finder-sensor@.service` (live BLE alerting per adapter,
+  root or a wireshark-group account), `skid-finder-collector.service`, and
+  `skid-finder-retention.timer` running `scripts/retention-sweep.sh`
+  (observations, captures and traces older than N days go; alerts,
+  incidents, state, summaries, sightings and the watchlist stay;
+  `--dry-run`). `docs/fixed-sensor.md` has the install and drop-ins.
+  `tests/test-systemd-units.sh` verifies the units with systemd-analyze
+  where available and the sweep's keep/delete sets.
+
+### Added
 - `./scripts/skid-finder.sh --doctor` (and the `doctor` menu entry): tools,
   privileges (including whether the unprivileged BLE route works here),
   adapters, Wi-Fi interface and monitor-mode capability, default-route

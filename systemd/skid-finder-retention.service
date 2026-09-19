@@ -1,0 +1,14 @@
+# Deletes observation files, captures and traces older than
+# SKID_FINDER_KEEP_DAYS (default 3) by running scripts/retention-sweep.sh.
+# Alerts, incidents and the fleet state are kept: they carry no addresses
+# and are the record that something happened. Override the number in a
+# drop-in. See docs/data-handling.md.
+[Unit]
+Description=Skid Finder retention sweep
+Documentation=https://github.com/ChiefGyk3D/Skid-Finder/blob/main/docs/data-handling.md
+
+[Service]
+Type=oneshot
+Environment=SKID_FINDER_HOME=/usr/local/share/hammunition/skid-finder
+Environment=SKID_FINDER_KEEP_DAYS=3
+ExecStart=/bin/bash -c 'exec "${SKID_FINDER_HOME}/scripts/retention-sweep.sh" "${SKID_FINDER_HOME}/logs" "${SKID_FINDER_KEEP_DAYS}"'
