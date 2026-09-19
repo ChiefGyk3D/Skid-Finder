@@ -142,4 +142,23 @@ python3 "${FP}" --input "${TMP_DIR}/id.log" --no-store --hunt apple \
 grep -q 'warn:' "${TMP_DIR}/apple.err" \
   || { echo "FAIL: model-level hunt did not warn about ambiguity." >&2; exit 1; }
 
+# --- Both capture paths must file a device under the same identity key -------------
+# A sensor net mixes laptops on the tshark route with uConsoles on btmon.
+# The same synthetic traffic in both spellings must produce the same set of
+# identity keys, or a device would be two devices depending on who heard it.
+for mode in identity spam ambient; do
+  python3 "${FIXTURE}" --mode "${mode}" --duration 10 --output "${TMP_DIR}/x-${mode}.log"
+  python3 "${FIXTURE}" --mode "${mode}" --duration 10 --format tshark --output "${TMP_DIR}/x-${mode}.tsv"
+  python3 "${ROOT_DIR}/scripts/ble-observe.py" --input "${TMP_DIR}/x-${mode}.log" 2>/dev/null \
+    | python3 -c 'import sys,json; print("\n".join(sorted({json.loads(l)["identity_key"] for l in sys.stdin})))' > "${TMP_DIR}/keys-btmon"
+  python3 "${ROOT_DIR}/scripts/ble-observe.py" --input "${TMP_DIR}/x-${mode}.tsv" --format tshark 2>/dev/null \
+    | python3 -c 'import sys,json; print("\n".join(sorted({json.loads(l)["identity_key"] for l in sys.stdin})))' > "${TMP_DIR}/keys-tshark"
+  if ! diff -q "${TMP_DIR}/keys-btmon" "${TMP_DIR}/keys-tshark" > /dev/null; then
+    echo "FAIL: identity keys differ between the btmon and tshark paths for '${mode}' traffic" >&2
+    diff "${TMP_DIR}/keys-btmon" "${TMP_DIR}/keys-tshark" | head -10 >&2
+    exit 1
+  fi
+done
+echo "cross-path identity ok: identical keys for identity, spam and ambient traffic"
+
 echo "BLE fingerprint test passed."
