@@ -147,6 +147,7 @@ except OSError as exc:
     scripts/ble-signature-scan.py \
     scripts/ble-observe.py \
     scripts/ble-live-alert.py \
+    scripts/live_window.py \
     scripts/ble-live-watch.sh \
     scripts/ble-publish.py \
     scripts/ble-collector.py \
