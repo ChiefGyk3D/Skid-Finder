@@ -498,7 +498,9 @@ Run the full local validation suite before a field session:
 
 This checks shell syntax for the toolkit scripts, runs `shellcheck` and `ruff` when they are installed, confirms the example config files exist, exercises the signature, fingerprint, GPS-merge, normalized-observation, live-watch and field-menu regression tests, measures detector false-positive rate and recall against the labeled corpus, verifies the capture pipeline survives its own timeout, and writes a timestamped report under `logs/`.
 
-The same suite runs in CI on every push and pull request. To match CI locally, install `shellcheck`:
+The same suite runs in CI on every push and pull request, on Python 3.11
+(Raspberry Pi OS bookworm, the uConsole) and 3.13 (Debian 13, Parrot,
+Ubuntu 26.04). To match CI locally, install `shellcheck`:
 
 ```bash
 sudo apt install -y shellcheck
@@ -769,10 +771,18 @@ for the scripts, `ruff` for the Python (ruleset in `ruff.toml`). The detector's
 behaviour is additionally measured, not just exercised, by
 `tests/test-detector-metrics.py`.
 
+## Data handling
+
+Records contain other people's device addresses and advertised names.
+[docs/data-handling.md](docs/data-handling.md) says what is collected, what
+it is for and not for, how long to keep it, who should see it, and what to
+tell a venue or an employer before a sensor runs. Security reports go by
+[SECURITY.md](SECURITY.md).
+
 ## Contributing
 
-Testing on additional hardware is especially welcome. When reporting an issue,
-include the output of:
+See [CONTRIBUTING.md](CONTRIBUTING.md). Testing on additional hardware is
+especially welcome. When reporting an issue, include the output of:
 
 ```bash
 ./scripts/troubleshoot-bluetooth.sh
