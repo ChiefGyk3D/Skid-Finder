@@ -13,7 +13,7 @@ need_cmd sort
 need_cmd head
 need_cmd tee
 need_cmd wc
-need_root
+need_capture_privileges
 
 IFACE="${1:-}"
 DURATION="${2:-300}"

@@ -146,6 +146,16 @@ If you are using the AC1200 USB-C Wi-Fi card, run:
 
 This collects USB inventory, controller visibility, rfkill state, module load info, and relevant Bluetooth/MediaTek dmesg lines into a log file under `logs/`.
 
+## Capturing without root
+
+Symptom:
+- `Run as root (sudo).` from a capture script on a laptop, or `btmon` says `Failed to bind channel: Operation not permitted`
+
+Fix:
+- `sudo usermod -aG wireshark "$USER"`, log out and in, confirm with `id -nG | grep wireshark` and `tshark -D | grep bluetooth-monitor`. The capture scripts then record through tshark and render with `btmon -r`; nothing else changes.
+- If `tshark -D` lists nothing, dumpcap is not setuid or capability-enabled: `sudo dpkg-reconfigure wireshark-common` and answer yes to non-root capture.
+- Live alerting and Wi-Fi monitor mode are root-only regardless.
+
 ## Wi-Fi monitor mode
 
 Symptom:

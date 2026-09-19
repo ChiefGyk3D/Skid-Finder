@@ -10,6 +10,17 @@ would break.
 ## [Unreleased]
 
 ### Added
+- Capture without root on laptops: members of the `wireshark` group record
+  the HCI monitor channel through tshark's `bluetooth-monitor` interface;
+  the toolkit rewrites it as btsnoop and renders it with `btmon -r`.
+  `capture-btmon.sh`, `ble-spam-watch.sh` and `ble-field-run.sh` take that
+  route automatically when not root (`need_capture_privileges`), keep the
+  btsnoop artifact, and report progress honestly. Live alerting and Wi-Fi
+  stay root-only. `tests/test-unprivileged-capture.sh`.
+- A second real ambient baseline in the corpus manifest: a Parrot 7.3
+  laptop's internal adapter, captured unprivileged (the file itself stays
+  git-ignored). Six ambient samples now; the gate holds at zero false
+  positives.
 - `docs/post-1.0-direction.md`: the post-1.0 tracks (Wi-Fi parity with
   BLE, LoRa/Meshtastic, other radios, enterprise defence and foxhunting),
   each with what is passively detectable, its honest limit, and what it
