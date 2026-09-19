@@ -9,6 +9,14 @@ would break.
 
 ## [Unreleased]
 
+### Added
+- `scripts/evidence-bundle.sh`: the handoff for venue security or law
+  enforcement. Given an incident record or a time window, it collects the
+  observation, alert and incident lines inside the window (plus a margin),
+  the traces whose run overlapped it, a plain-language summary and a
+  sha256 manifest into one archive under `logs/evidence/`.
+  `tests/test-evidence-bundle.sh` verifies the scoping and that the
+  manifest checks out after extraction.
 ### Changed
 - Fingerprints (identity keys `fp:…`) are version 2: built from Bluetooth
   SIG company ids and a normalised PDU class instead of vendor strings and

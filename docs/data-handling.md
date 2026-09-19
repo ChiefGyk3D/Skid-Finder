@@ -80,7 +80,10 @@ officers will ask for the record table above; give them this page.
 ## Evidence handoff
 
 When something is handed to venue security or law enforcement, hand over
-the incident window and the involved identities, not the day. The
-evidence-bundle command planned after 1.0 scopes that automatically; today
-it is a manual copy of the capture and the observation file for the
-window, with a note of what was seen and when.
+the incident window, not the day. `scripts/evidence-bundle.sh` does that:
+given an incident record (or a time window) it collects the observation,
+alert and incident lines inside the window plus a margin, the traces whose
+run overlapped it (whole, since a third party verifies those with their own
+tools), a plain-language summary, and a sha256 manifest, into one archive
+under `logs/evidence/`. Hand the archive over and keep the local copy only
+as long as the incident needs it.
