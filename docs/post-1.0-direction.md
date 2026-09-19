@@ -155,16 +155,18 @@ precision/recall gate. None ships without a baseline.
 A conference runs the tool for a weekend; a security team runs it for
 years. The difference is operations, not detection.
 
-- **Fixed sensor fleet.** Sensors as a service: install on a Pi or an
-  ESP32, register with the collector, heartbeat, position from config,
-  over-the-air config for channels and profiles. Sensor health is an alert
-  class of its own (a dead sensor is a finding).
-- **Incident records.** The collector groups a run of related alerts
-  (same family, overlapping sensors, continuous in time) into one
-  `fleet-incident/1` with first seen, last seen, sensors, location track,
-  the identities involved, and the evidence files. That is the unit a SOC
-  ticket wraps, and the thing an analyst is paged for once, not every five
-  seconds.
+- **Fixed sensor fleet.** *Half exists now*: `systemd/` carries a
+  per-adapter sensor unit, the collector unit and a retention timer
+  (`docs/fixed-sensor.md`); the heartbeat and position from config were
+  there already. Still to do: over-the-air config for channels and
+  profiles, and sensor health as an alert class of its own (a dead sensor
+  is a finding).
+- **Incident records.** *Exists now*: the collector groups a run of related
+  alerts into one `fleet-incident/1` with first seen, last seen, sensors,
+  peak rate, location track and the identities involved
+  (`--incidents-out`). That is the unit a SOC ticket wraps, and the thing
+  an analyst is paged for once, not every five seconds. Not yet exercised
+  against a real fleet.
 - **Evidence bundle.** *Exists now* (`scripts/evidence-bundle.sh`): the
   observation, alert and incident records for the window, the traces whose
   run overlapped it, a summary and a sha256 manifest, scoped to the

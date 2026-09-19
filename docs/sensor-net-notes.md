@@ -147,12 +147,14 @@ which `foxhunt-rssi.sh --from-incident` loads on the handheld. Rotating
 (model-tier) addresses in it go stale within minutes; the tracker prints
 each address with its tier so the hunter knows which to trust.
 
-## Wi-Fi (later)
+## Wi-Fi (exists; alpha)
 
-The `modality` field and the module split exist so a Wi-Fi capture frontend can
-emit `ble-obs`-shaped records (`modality:"wifi"`) and reuse the collector,
-identity tiers, and alerting. Detection would mirror the BLE families — deauth
-and disassoc floods, beacon floods, evil-twin/karma/known-beacon patterns — and
-fingerprinting would key on probe-request SSID lists and tagged-parameter order
-rather than the MAC, since modern clients randomise probe MACs. As with BLE,
-everything stays passive: detection only, never transmit.
+The `modality` field and the module split are what let the Wi-Fi frontend
+reuse everything here. `wifi-observe.py` emits `wifi-obs/1` records with the
+same envelope, the collector keeps a Wi-Fi window per sensor and judges it
+with the Wi-Fi detector (deauth and disassoc floods, beacon floods, evil
+twins, KARMA responders), and `wifi_identity.py` fingerprints randomised
+clients by tag order, rates, capabilities and vendor OUIs rather than the
+MAC. All of it is measured on synthetic traffic only so far; see
+[wifi-notes.md](wifi-notes.md). As with BLE, everything stays passive:
+detection only, never transmit.

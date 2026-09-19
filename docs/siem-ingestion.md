@@ -116,8 +116,11 @@ Two practical notes:
 
 ## What is not here yet
 
-- No collector: sensors write files, nothing yet merges them. The shipper is
-  the collector for now, which is fine for alerting and not for triangulation.
+- No shipper configuration exercised end to end. The collector exists
+  (`scripts/ble-collector.py`, over MQTT or a watched directory) and writes
+  `fleet-state/1`, `fleet-alert/1` and `fleet-incident/1`; what has not
+  been done is running a real Filebeat or Wazuh agent over these files and
+  seeing the records land.
 - No dashboard. A Grafana/OpenSearch dashboard over `ble-alert/1` is the
   natural next step once records are landing; the fields above are the ones
   it would plot.

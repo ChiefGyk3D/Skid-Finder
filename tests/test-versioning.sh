@@ -28,6 +28,18 @@ grep -qF "## [${version}]" "${ROOT_DIR}/CHANGELOG.md" \
 grep -qF "[${version}]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v${version}" "${ROOT_DIR}/CHANGELOG.md" \
   || fail "CHANGELOG.md has no release link for v${version}"
 
+# The README's Status section is the version a reader sees first. It must
+# name the same version and the stage the suffix implies, or a release
+# leaves the README describing the previous one.
+stage="stable"
+case "${version}" in
+  *-alpha.*) stage="alpha" ;;
+  *-beta.*)  stage="beta" ;;
+  *-rc.*)    stage="rc" ;;
+esac
+grep -qF "Current version: **${version}** (${stage})" "${ROOT_DIR}/README.md" \
+  || fail "README.md Status section does not say 'Current version: **${version}** (${stage})'"
+
 out="$("${ROOT_DIR}/scripts/skid-finder.sh" --version)"
 [[ "${out}" == "skid-finder ${version}" ]] || fail "menu --version printed '${out}', expected 'skid-finder ${version}'"
 

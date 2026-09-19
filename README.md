@@ -19,6 +19,41 @@ Out-of-box defaults are single-adapter safe:
 - scripts auto-fallback to `hci0` if `hci1` is missing or unstable
 - one-command mode switch is available for `dual`, `single`, and `auto`
 
+## Status
+
+[![CI](https://github.com/ChiefGyk3D/Skid-Finder/actions/workflows/ci.yml/badge.svg)](https://github.com/ChiefGyk3D/Skid-Finder/actions/workflows/ci.yml)
+
+Current version: **0.6.0-alpha.1** (alpha), released 2026-09-19.
+
+**Alpha** means every capability below is complete and green in CI on
+Python 3.11 and 3.13 against synthetic captures and stubbed radios, and the
+BLE paths have additionally been run on one laptop's real adapter. Nothing
+has been confirmed on the uConsole + AIO v2 yet. A match is a lead, not a
+verdict.
+
+| Capability | Since | Measured against |
+|---|---|---|
+| BLE spam detector, three profiles, precision/recall gate | 0.1.0 | labeled corpus (synthetic spam, six real ambient captures); thresholds set on the BSidesLV 2026 floor |
+| Device fingerprinting with identity tiers, sighting history, watchlist, foxhunt | 0.1.0 | real conference captures; one laptop foxhunt |
+| Normalized records (`ble-obs/1`, `ble-alert/1`), live alerting, field menu | 0.1.0 | synthetic traffic; one laptop live watch |
+| Sensor net: MQTT publisher, collector, location estimate, ESP32 sketch | 0.2.0 | stand-in broker in CI; the sketch compiles but has not run on a board |
+| Wi-Fi: deauth/disassoc, beacon flood, evil twin, KARMA detection | 0.3.0 | synthetic traffic only; never run on the AC1200 |
+| Root-free BLE on laptops (`wireshark` group, tshark route) | 0.4.0 | a Parrot 7.3 laptop, 2026-09-18 |
+| Fleet incidents, foxhunt handoff, evidence bundle, systemd units, doctor | 0.5.0 to 0.6.0 | synthetic fleet fixtures in CI |
+| Wi-Fi fingerprinting across MAC rotation | 0.6.0 | synthetic traffic only |
+
+What moves this to **beta** is the hardware checklist in
+[docs/ROADMAP.md](docs/ROADMAP.md), tracked by
+[issue #1](https://github.com/ChiefGyk3D/Skid-Finder/issues/1). It needs the
+uConsole, the AC1200 and a Flipper Zero in a contained space; the first
+command to run there is `./scripts/skid-finder.sh --doctor`. Every release
+is recorded in [CHANGELOG.md](CHANGELOG.md) and published on the
+[releases page](https://github.com/ChiefGyk3D/Skid-Finder/releases);
+`./scripts/skid-finder.sh --version` prints the version of a checkout. The
+stage definitions, the milestone table and the release procedure are in
+[docs/ROADMAP.md](docs/ROADMAP.md), and `tests/test-versioning.sh` fails
+the build if this section, `VERSION` and the changelog disagree.
+
 ## Quick start on a laptop or desktop
 
 Any Linux machine with a BlueZ-visible Bluetooth adapter can run the BLE
@@ -76,14 +111,34 @@ This toolkit is designed to **detect and analyze** BLE spam—**not to generate 
 
 ## Features
 
-- Discover available HCI adapters
-- Capture raw BLE monitor output via `btmon`
-- Summarize top BLE advertisers and flag high-rate senders
-- Match defensive signatures for common scripted BLE spam/flood behaviors
-- Live target RSSI tracking for hot/cold foxhunt movement
-- Optional dual-pane tmux session for monitor + hunt workflow
-- One-command capture plus summary report for field sessions
-- Reversible AIO feature profiles to reduce noise and power draw during BLE operations
+Everything is receive-only. The toolkit detects and never transmits.
+
+- **BLE spam detection**: signatures for the common scripted floods
+  (Flipper-style Apple popups, Marauder-style rotating beacons, Fast Pair
+  lures, random-address churn, lure-name rotation), keyed on address-reuse
+  shape rather than volume, with three sensitivity profiles and a
+  precision/recall gate against a labeled corpus.
+- **Identity across MAC rotation**: fingerprints with a stated tier
+  (`strong`, `session`, `model`, `ambiguous`), a sighting history, a
+  watchlist, and identity keys that agree whichever capture path heard the
+  device.
+- **Foxhunting**: median-RSSI tracking of one address, of every address a
+  named or fingerprinted target is using, or of the target set an incident
+  hands over.
+- **Live alerting** over a sliding window with the same detector as the
+  batch scan, writing normalized JSON Lines a SIEM ingests as-is.
+- **Sensor net**: an MQTT publisher, a collector that merges several
+  sensors by identity, judges each one, estimates location with its error
+  bar, and groups a flood into one incident; an ESP32 reference node.
+- **Wi-Fi**: passive detection of deauth/disassoc floods, beacon floods,
+  evil twins and KARMA responders, plus fingerprinting of randomised
+  clients, in the same record shape.
+- **Handoff**: an evidence bundle scoped to one incident with a sha256
+  manifest, a data-handling note, and a nightly retention sweep.
+- **Operations**: a field menu for one-handed use, a doctor that reports
+  what a machine can do with fixes, systemd units for a fixed sensor and
+  the collector, root-free BLE capture on laptops, reversible AIO feature
+  profiles, adapter mode switching, and health and recovery scripts.
 
 ## Hardware
 
@@ -461,7 +516,7 @@ schema and how this becomes the foundation for a triangulating sensor net,
 and [docs/siem-ingestion.md](docs/siem-ingestion.md) for the `ble-alert/1`
 record the live watcher writes and how to ship both files to a SIEM.
 
-### 3e) Wi-Fi: deauth floods, fake APs, evil twins, KARMA responders
+### 3d) Wi-Fi: deauth floods, fake APs, evil twins, KARMA responders
 
 The same shape for 802.11, passive only:
 
@@ -488,7 +543,7 @@ caveats and what must be verified on hardware are in
 [docs/wifi-notes.md](docs/wifi-notes.md). None of the Wi-Fi thresholds have
 been baselined on a real venue yet.
 
-### 3d) Sensor net: several nodes, one collector
+### 3e) Sensor net: several nodes, one collector
 
 Set `MQTT_HOST` (and the rest of the `MQTT_*` keys) in
 `config/interfaces.conf` and `ble-live-watch.sh` ships every observation and
@@ -702,14 +757,6 @@ mkdir -p ~/field-archives
 tar -czf ~/field-archives/ble-$(date +%Y%m%d-%H%M%S).tgz logs/
 ```
 
-## Git Initialization
-
-```bash
-git init
-git add .
-git commit -m "Initial Skid Finder BLE spam detector and foxhunt toolkit"
-```
-
 ## Troubleshooting
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for adapter detection, `hci1` local-name errors, package install issues, and single-adapter fallback workflows.
@@ -739,19 +786,11 @@ MediaTek AC1200-specific diagnostic report:
 - Signature matches are heuristic and defensive, not attribution-grade proof of a specific tool.
 - Coverage is strong for common scripted BLE spam patterns but not exhaustive for every custom payload seen during Hacker Summer Camp.
 
-## Versions and stages
-
-The current version is in `VERSION` (`./scripts/skid-finder.sh --version`
-prints it). Versions, the alpha/beta/rc/stable stages and what has to be
-measured before each label is used are defined in
-[docs/ROADMAP.md](docs/ROADMAP.md); every release is recorded in
-[CHANGELOG.md](CHANGELOG.md) and tagged. Anything at `0.x-alpha` is green in
-CI but not yet confirmed on the uConsole hardware.
-
 ## Known Limitations and Roadmap
 
 Open work, kept here rather than in a tracker so the caveats travel with the
-tool. The milestone view of the same list is [docs/ROADMAP.md](docs/ROADMAP.md),
+tool. The stage each item is at is in the Status section above; the
+milestone view of the same list is [docs/ROADMAP.md](docs/ROADMAP.md),
 and what comes after 1.0 (Wi-Fi fingerprinting and foxhunting, LoRa and
 Meshtastic, 802.15.4, sub-GHz, cellular, GNSS, spectrum watch, and the
 enterprise operations layer) is in
@@ -814,7 +853,8 @@ a watched directory, judges each sensor with the shared detector, and
 estimates location as an RSSI-weighted centroid with its error stated. The
 publisher and collector are tested against a stand-in broker in CI; neither
 has been run against a real broker or a second physical node from this
-project yet, and the ESP32 reference sketch has not been compiled here.
+project yet. The ESP32 reference sketch compiles (arduino-cli, ESP32 core
+3.3.12, 2026-09-18) but has not run on a board.
 
 The honest caveat, recorded in [docs/sensor-net-notes.md](docs/sensor-net-notes.md):
 RSSI-based location indoors is coarse (multipath swings readings by 20 dB), and
@@ -824,11 +864,12 @@ or `session` tier device, or a spam source that transmits continuously. A
 the collector refuses to place it on a map. Multilateration with a
 calibrated path-loss model is not implemented.
 
-### SIEM and dashboards (records exist, pipeline untested)
+### SIEM and dashboards (records and incidents exist, shipper untested)
 
 Live runs write `logs/alerts-<iface>-<stamp>.jsonl`, one `ble-alert/1`
-record per detector evaluation, beside the `ble-obs/1` observation file. Both
-are JSON Lines a log shipper can pick up as-is. The record shapes and the
+record per detector evaluation, beside the `ble-obs/1` observation file, and
+the collector writes `fleet-incident/1` records. All are JSON Lines a log
+shipper can pick up as-is. The record shapes and the
 intended Wazuh/OpenSearch path are in
 [docs/siem-ingestion.md](docs/siem-ingestion.md); no shipper configuration has
 been exercised end to end from this toolkit yet, and there is no dashboard.
@@ -842,9 +883,10 @@ monitor-mode capture and emit `wifi-obs/1` / `wifi-alert/1` records the
 collector and publisher already carry. The thresholds are measured against
 synthetic traffic only; the capture path has not been run on the MT7921
 under the AIO v2 kernel from this project; and two tshark field
-representations are handled by heuristic (see docs/wifi-notes.md). Probe-
-request fingerprinting of randomised clients is not implemented. Passive
-only: detection, never transmit.
+representations are handled by heuristic (see docs/wifi-notes.md).
+Fingerprinting of randomised clients exists but is measured on synthetic
+traffic only; a real capture across one phone's MAC rotations is the check.
+Passive only: detection, never transmit.
 
 ### Tooling
 
