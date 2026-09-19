@@ -9,6 +9,12 @@ would break.
 
 ## [Unreleased]
 
+### Changed
+- The BLE and Wi-Fi live alerters share one windowing loop
+  (`scripts/live_window.py`); each is now a small adapter naming its
+  record type, detector and wording. No change in behaviour or output; a
+  third modality adds an adapter rather than a copy of the loop.
+
 ### Added
 - `SECURITY.md` (what counts as a security report for a receive-only tool,
   where to send it), `CONTRIBUTING.md` (the rules that shape a change and
