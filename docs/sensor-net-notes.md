@@ -141,6 +141,11 @@ flood "visible" for a window length after it stops). `--incidents-out`
 appends one `fleet-incident/1` record on open and one on close; the open
 incident also rides in `fleet-state/1` under `incident`. Its identities are
 what the matching sensors heard, not attribution, and the record says so.
+The record's `targets` list is the foxhunt handoff: the addresses those
+identities used while the incident ran, reliable tiers first and capped,
+which `foxhunt-rssi.sh --from-incident` loads on the handheld. Rotating
+(model-tier) addresses in it go stale within minutes; the tracker prints
+each address with its tier so the hunter knows which to trust.
 
 ## Wi-Fi (later)
 
