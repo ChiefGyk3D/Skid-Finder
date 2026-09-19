@@ -92,7 +92,17 @@ fi
 
 # --- doctor --------------------------------------------------------------------------
 "${MENU}" --doctor > "${workdir}/doctor.txt" 2>&1 || true
-grep -q '^Tools' "${workdir}/doctor.txt" && grep -q '^Summary:' "${workdir}/doctor.txt" || fail "--doctor did not produce its report"
+grep -q '^Tools' "${workdir}/doctor.txt" && grep -q '^Summary:' "${workdir}/doctor.txt" || { cat "${workdir}/doctor.txt" >&2; fail "--doctor did not produce its report"; }
+# On a machine with none of the radio tools (CI, a fresh laptop) the report
+# must still reach its summary and name what is missing, not abort halfway.
+mkdir -p "${workdir}/bare"
+for t in bash python3 tr grep awk head cat mktemp dirname sed id find tail sort wc ls cp; do
+  p="$(command -v "${t}" 2>/dev/null)" && ln -sf "${p}" "${workdir}/bare/${t}"
+done
+PATH="${workdir}/bare" "${MENU}" --doctor > "${workdir}/doctor-bare.txt" 2>&1 || true
+grep -q '^Summary:' "${workdir}/doctor-bare.txt" || { cat "${workdir}/doctor-bare.txt" >&2; fail "--doctor aborted on a machine without the radio tools"; }
+grep -qE '^  MISS +btmon' "${workdir}/doctor-bare.txt" || fail "--doctor did not report btmon missing on a bare machine"
+grep -qE 'hciconfig missing' "${workdir}/doctor-bare.txt" || fail "--doctor did not explain why adapters could not be listed"
 grep -qE '^  (ok|warn|MISS) +btmon' "${workdir}/doctor.txt" || fail "--doctor did not check btmon"
 out="$("${MENU}" --print doctor)"
 [[ "${out}" == *"skid-finder.sh --doctor" ]] || fail "doctor action malformed: ${out}"
