@@ -171,11 +171,11 @@ years. The difference is operations, not detection.
   incident window rather than the day. Scoping to the involved identities
   only (rather than every device heard in the window) is the remaining
   refinement.
-- **Foxhunt handoff.** The collector's estimate is the starting point; a
-  handheld (the uConsole) takes over from there. The handoff is a target
-  set (identity key, current addresses, last centroid, last seen) the
-  foxhunt tool loads with one flag, and the handheld's own sightings feed
-  back into the incident.
+- **Foxhunt handoff.** *Half exists now*: an incident record carries a
+  target set (addresses per identity, tier, name; reliable tiers first)
+  and `foxhunt-rssi.sh --from-incident` loads it in one flag. Still to do:
+  the handheld's own sightings feeding back into the incident, and the
+  last centroid shown as a starting bearing.
 - **SIEM, dashboards, playbooks.** Wazuh decoders and rules and an
   OpenSearch/Grafana dashboard over `*-alert/1` and `fleet-incident/1`,
   exercised end to end and kept in the repository as tested examples.

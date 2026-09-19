@@ -106,9 +106,21 @@ assert inc["duration_sec"] >= 25, f"a 30 s flood produced a {inc['duration_sec']
 assert inc["location"] and inc["location"]["track_points"] >= 3, "no location track"
 assert inc["identities"] and all(i["tier"] in ("strong", "session", "model", "ambiguous") for i in inc["identities"])
 assert "not attribution" in inc["note"]
-print("incidents ok: one open, one close, %d s, %d track points" % (inc["duration_sec"], inc["location"]["track_points"]))
+t = inc["targets"]
+assert t and all({"address", "identity_key", "tier"} <= set(x) for x in t), "incident carries no target set"
+assert t[0]["tier"] == "strong" and t[0]["address"] == "40:ED:98:18:DE:AB", "reliable targets must lead the handoff: %r" % t[0]
+assert len(t) <= 40
+print("incidents ok: one open, one close, %d s, %d track points, %d targets" % (inc["duration_sec"], inc["location"]["track_points"], len(t)))
 PY
 grep -q "INCIDENT inc-" "${TMP}/collector.out" || fail "collector summary never printed the incident"
+
+# --- Foxhunt handoff: the tracker loads the incident's target set ----------------
+"${ROOT_DIR}/scripts/foxhunt-rssi.sh" --from-incident "${TMP}/incidents.jsonl" --list-targets \
+  > "${TMP}/targets.txt" 2> "${TMP}/targets.err" || { cat "${TMP}/targets.err" >&2; fail "foxhunt could not load targets from the incident"; }
+[[ "$(head -n 1 "${TMP}/targets.txt")" == "40:ED:98:18:DE:AB" ]] || fail "handoff did not lead with the strong-tier address: $(head -n1 "${TMP}/targets.txt")"
+grep -q "tier=model" "${TMP}/targets.err" && grep -q "rotating" "${TMP}/targets.err" || fail "handoff did not warn about rotating addresses"
+"${ROOT_DIR}/scripts/foxhunt-rssi.sh" --from-incident "${TMP}/incidents.jsonl" --id inc-nope --list-targets > /dev/null 2>&1 && fail "unknown incident id accepted"
+echo "foxhunt handoff ok: $(wc -l < "${TMP}/targets.txt" | tr -d ' ') targets, strong first"
 
 # --- Directory watch --------------------------------------------------------------
 python3 "${ROOT_DIR}/scripts/ble-collector.py" --watch "${TMP}/fx" --interval 1 --max-evals 2 \

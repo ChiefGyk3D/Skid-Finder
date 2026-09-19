@@ -398,6 +398,18 @@ Read the tier warning it prints. If the target resolved at `model` or
 `ambiguous` tier the address set may span several different devices, and the
 RSSI trend will jump between them as you walk.
 
+To take the collector's handoff instead, when an incident has been
+recorded (`ble-collector.py --incidents-out`): the incident carries the
+addresses the matching sensors heard most, reliable identities first, and
+the tracker loads them in one flag. `--list-targets` shows what it would
+hunt without touching the radio; from the menu, answer `incident` to the
+foxhunt prompt.
+
+```bash
+sudo ./scripts/foxhunt-rssi.sh --from-incident logs/fleet-incidents.jsonl
+./scripts/foxhunt-rssi.sh --from-incident logs/fleet-incidents.jsonl --list-targets
+```
+
 To supply targets yourself:
 
 ```bash

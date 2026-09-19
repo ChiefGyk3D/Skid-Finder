@@ -22,8 +22,11 @@ would break.
   carry `fingerprint`, `tags` and `vendor_ouis`. Menu entry
   `wifi-fingerprint`. `tests/test-wifi-fingerprint.sh`. Synthetic traffic
   only; a real capture across a phone's MAC rotations is the check.
-
-### Added
+- Foxhunt handoff: `fleet-incident/1` records carry `targets` (the
+  addresses each involved identity used during the incident, reliable
+  tiers first, capped), and `foxhunt-rssi.sh --from-incident FILE [--id]`
+  loads them; `--list-targets` prints the set without touching the radio.
+  The menu's foxhunt prompt accepts `incident`.
 - `scripts/evidence-bundle.sh`: the handoff for venue security or law
   enforcement. Given an incident record or a time window, it collects the
   observation, alert and incident lines inside the window (plus a margin),
