@@ -9,6 +9,26 @@ would break.
 
 ## [Unreleased]
 
+### Changed
+- README opens with a Status section: the CI badge, the current version
+  and stage, what alpha means here, a table of every capability with the
+  version it landed in and what it has been measured against, and the
+  hardware gate to beta. The Features list describes the toolkit as it is
+  rather than the BLE-only first cut; the stale claims that the ESP32
+  sketch was uncompiled and that Wi-Fi fingerprinting did not exist are
+  gone, as is the git-init section.
+- `tests/test-versioning.sh` also checks the README's `Current version:`
+  line names `VERSION` and its stage, so a release cannot leave the README
+  behind.
+- `docs/ROADMAP.md`: the milestone table covers 0.4.0 to 0.6.0 (pulled
+  forward from the post-1.0 tracks), the hardware checklist gains the
+  doctor, Wi-Fi monitor mode, a real broker and the ESP32 flash, the
+  release procedure gates on green CI and ends with the Hammunition
+  re-pin, and a "Keeping this current" table lists every place the
+  version lives. `docs/sensor-net-notes.md`, `docs/siem-ingestion.md` and
+  `docs/post-1.0-direction.md` no longer describe the Wi-Fi frontend, the
+  collector, incidents or the systemd units as future work.
+
 ## [0.6.0-alpha.1] — 2026-09-19
 
 **Alpha.** The SOC handoff release: one incident per flood with a target
