@@ -163,10 +163,11 @@ tshark -D | grep bluetooth-monitor   # must be listed
 ./scripts/ble-field-run.sh hci0 60
 ```
 
-Live alerting works without root too: `ble-live-watch.sh` streams the
-same advertising reports from tshark as fields, one line per report, into
-the same observer and detector, and a second tshark keeps the btsnoop
-trace. When the unprivileged route is available the menu drops `sudo` from the
+Live alerting and foxhunting work without root too: `ble-live-watch.sh`
+streams the same advertising reports from tshark as fields, one line per
+report, into the same observer and detector, and a second tshark keeps the
+btsnoop trace; `foxhunt-rssi.sh` takes its address and RSSI pairs from the
+same stream. When the unprivileged route is available the menu drops `sudo` from the
 BLE actions automatically; Wi-Fi and the AIO profiles keep it. Differences
 from the root path: the batch captures render their text
 log when the capture ends (so running counts are not shown), the monitor

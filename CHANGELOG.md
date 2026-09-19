@@ -37,6 +37,10 @@ would break.
   `--dry-run`). `docs/fixed-sensor.md` has the install and drop-ins.
   `tests/test-systemd-units.sh` verifies the units with systemd-analyze
   where available and the sweep's keep/delete sets.
+- Foxhunting without root: `foxhunt-rssi.sh` takes its address/RSSI pairs
+  from tshark's `bluetooth-monitor` stream when not root, so the whole
+  BLE workflow (capture, field run, live alerting, foxhunt) runs on a
+  laptop in the `wireshark` group without `sudo`.
 
 ### Added
 - `./scripts/skid-finder.sh --doctor` (and the `doctor` menu entry): tools,
