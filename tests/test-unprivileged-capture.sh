@@ -117,6 +117,49 @@ print("live tshark observations ok: %d" % len(rows))
 PY
 grep -q "  ALERT " "${workdir}/live-alerts.txt" || { cat "${workdir}/live-alerts.txt" "${workdir}/live-alerts.err" >&2; fail "live alerter did not fire on the tshark-format spam stream"; }
 
+# --- Foxhunt without root: the tracker reads address/RSSI pairs from tshark ----------
+cat > "${workdir}/bin/tshark" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "${workdir}/tshark.args"
+if [[ "\$1" == "-D" ]]; then printf '6. bluetooth-monitor\n'; exit 0; fi
+# Two advertisers, one of them the target, RSSI rising as the hunter walks in.
+for r in -80 -78 -75 -70 -66 -60; do
+  printf 'aa:bb:cc:dd:ee:ff\t%s\n' "\$r"
+  printf '11:22:33:44:55:66\t-90\n'
+  sleep 0.3
+done
+# End of input ends the hunt cleanly (the tracker breaks on EOF).
+STUB
+chmod +x "${workdir}/bin/tshark"
+cat > "${workdir}/bin/hciconfig" <<STUB
+#!/usr/bin/env bash
+echo "hci0:	Type: Primary  Bus: USB"
+echo "	UP RUNNING"
+STUB
+# The scan helpers must not reach the real bluetoothctl/btmgmt from a test.
+cat > "${workdir}/bin/bluetoothctl" <<STUB
+#!/usr/bin/env bash
+while IFS= read -r line; do [[ "\${line}" == "quit" ]] && break; done
+STUB
+cat > "${workdir}/bin/btmgmt" <<STUB
+#!/usr/bin/env bash
+[[ "\$*" == *info* ]] && echo "        addr AA:BB:CC:00:11:22 version 11 manufacturer 2 class 0x000000"
+exit 0
+STUB
+chmod +x "${workdir}/bin/hciconfig" "${workdir}/bin/bluetoothctl" "${workdir}/bin/btmgmt"
+mkdir -p "${workdir}/froot/scripts" "${workdir}/froot/config"
+cp "${ROOT_DIR}"/scripts/*.sh "${ROOT_DIR}"/scripts/*.py "${workdir}/froot/scripts/"
+cp "${ROOT_DIR}/config/interfaces.conf.example" "${workdir}/froot/config/interfaces.conf"
+: > "${workdir}/tshark.args"
+timeout -k 2 30 "${workdir}/froot/scripts/foxhunt-rssi.sh" AA:BB:CC:DD:EE:FF hci0 > "${workdir}/fox.txt" 2> "${workdir}/fox.err" || true
+grep -q -- "-e bthci_evt.bd_addr -e bthci_evt.rssi" "${workdir}/tshark.args" || { cat "${workdir}/fox.err" >&2; fail "foxhunt did not stream address/RSSI pairs from tshark"; }
+grep -q "median" "${workdir}/fox.txt" || { cat "${workdir}/fox.txt" "${workdir}/fox.err" >&2; fail "foxhunt printed no median RSSI"; }
+if grep -q -- "-90" "${workdir}/fox.txt"; then fail "foxhunt reported the other device's RSSI"; fi
+last="$(grep -oE 'median[0-9]*=-?[0-9]+' "${workdir}/fox.txt" | tail -1 | cut -d= -f2)"
+first="$(grep -oE 'median[0-9]*=-?[0-9]+' "${workdir}/fox.txt" | head -1 | cut -d= -f2)"
+(( last > first )) || fail "median did not rise while the target got louder (first=${first} last=${last})"
+echo "foxhunt without root ok: median ${first} -> ${last} dBm"
+
 # --- Without the route, the gate refuses with the fix ---------------------------------
 mkdir -p "${workdir}/nobin"
 for tool in grep mktemp dirname; do ln -sf "$(command -v "${tool}")" "${workdir}/nobin/${tool}"; done
