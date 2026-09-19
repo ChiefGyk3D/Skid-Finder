@@ -79,6 +79,7 @@ def to_event(record, sensor_id, lat, lon, epoch_base, absolute=False):
         "tx_power": record.tx_power,
         "name": record.name,
         "companies": sorted(set(record.companies)),
+        "company_ids": sorted(set(record.company_ids)),
         "service_uuids": sorted(set(record.service_uuids)),
         "pdu": record.pdu_type,
         "flags": record.flags,

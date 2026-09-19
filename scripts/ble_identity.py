@@ -50,16 +50,29 @@ def identity_tier(record, serial: str) -> str:
     return "model"
 
 
+# Bump when the fields below change: keys from an older store no longer
+# match and a sighting history has to be rebuilt.
+FINGERPRINT_VERSION = 2
+
+
 def fingerprint(record) -> str:
+    """A content fingerprint that is the same whichever capture path saw the advert.
+
+    Version 2 keys on vendor ids rather than vendor names (btmon prints
+    'Apple, Inc.', tshark prints 0x004c) and on the PDU class both paths
+    can name, and drops the flags byte, which only btmon exposes. A sensor
+    net mixing laptops on the tshark route with uConsoles on btmon files a
+    device under one key because of this.
+    """
     model, _ = split_name(record.name)
+    ids = getattr(record, "company_ids", None) or []
     parts = [
-        "c=" + ",".join(sorted(set(record.companies))),
+        "c=" + ",".join(sorted(set(ids))) if ids else "c=" + ",".join(sorted(set(record.companies))),
         "u=" + ",".join(sorted(set(record.service_uuids))),
         "n=" + model,
         "t=" + ("" if record.tx_power is None else str(record.tx_power)),
         "l=" + ("" if record.data_length is None else str(record.data_length)),
-        "f=" + record.flags,
-        "p=" + record.pdu_type,
+        "p=" + (record.pdu_type or ""),
     ]
     blob = "|".join(parts)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]

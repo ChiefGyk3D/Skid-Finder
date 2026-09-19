@@ -24,7 +24,7 @@ def emit(handle, timestamp: float, addr: str, addr_type: str, rssi: int,
          service_uuid: str = "", addr_class: str = "Resolvable") -> None:
     if FORMAT == "tshark":
         emit_tshark(handle, timestamp, addr, addr_type, rssi, name, company_id,
-                    service_uuid, addr_class)
+                    service_uuid, addr_class, company)
         return
     handle.write(f"> HCI Event: LE Meta Event (0x3e) plen 43 {' ' * 20}#1 {timestamp:.6f}\n")
     handle.write("      LE Extended Advertising Report (0x0d)\n")
@@ -32,6 +32,10 @@ def emit(handle, timestamp: float, addr: str, addr_type: str, rssi: int,
     handle.write("        Entry 0\n")
     handle.write("          Event type: 0x0013\n")
     handle.write("          Legacy PDU Type: ADV_IND (0x0013)\n")
+    if addr_type.lower() == "public" and addr_class in ("Resolvable", "Non-Resolvable", "Static"):
+        # btmon annotates a public address with its OUI, never with a
+        # random-address class; a fixture must not print the impossible.
+        addr_class = "OUI " + addr[0:8].replace(":", "-")
     handle.write(f"          Address type: {addr_type} (0x01)\n")
     handle.write(f"          Address: {addr} ({addr_class})\n")
     handle.write("          Primary PHY: LE 1M\n")
@@ -48,27 +52,31 @@ def emit(handle, timestamp: float, addr: str, addr_type: str, rssi: int,
 
 
 def emit_tshark(handle, timestamp, addr, addr_type, rssi, name, company_id,
-                service_uuid, addr_class) -> None:
+                service_uuid, addr_class, company="") -> None:
     """The same advertisement as tshark -T fields prints it (ble_parse.TSHARK_FIELDS).
 
     The address class lives in the address bits on this path, so the top
     two bits of the first byte are rewritten to match addr_class.
     """
-    first = int(addr[0:2], 16) & 0x3F
     if addr_type.lower() == "public" or addr_class.startswith("OUI") or addr_class not in (
             "Resolvable", "Non-Resolvable", "Static"):
+        # A public address is printed as-is; only random ones carry their
+        # class in the top two bits.
         peer_type = "0x00"
-        if addr_type.lower() != "public":
-            peer_type = "0x00"
+        addr = addr.lower()
     else:
         peer_type = "0x01"
-        first |= {"Static": 0xC0, "Resolvable": 0x40, "Non-Resolvable": 0x00}[addr_class]
-    addr = f"{first:02x}" + addr[2:].lower()
+        first = (int(addr[0:2], 16) & 0x3F) | {"Static": 0xC0, "Resolvable": 0x40, "Non-Resolvable": 0x00}[addr_class]
+        addr = f"{first:02x}" + addr[2:].lower()
     uuid = ""
     types = ["0x01"]
     if service_uuid:
         uuid = "0xfe2c" if "fe2c" in service_uuid.lower() else "0x180f"
         types.append("0x16")
+    # btmon's emitter prints a Company line only when a name is given; the
+    # id alone must not conjure a vendor the other spelling does not have.
+    if not company:
+        company_id = 0
     if company_id:
         types.append("0xff")
     if name:
@@ -76,7 +84,7 @@ def emit_tshark(handle, timestamp, addr, addr_type, rssi, name, company_id,
     handle.write("\t".join([
         f"{1758400000 + timestamp:.6f}", "0x0d", addr, peer_type, str(rssi), name,
         f"0x{company_id:04x}" if company_id else "", uuid, ",".join(types),
-        "0x0013", "", "24",
+        "0x0013", "", "24",   # same event type and data length btmon's fixture prints
     ]) + "\n")
 
 
