@@ -75,10 +75,21 @@ if ! grep -qx 'select AA:BB:CC:00:11:22' "${workdir}/bluetoothctl.in"; then
   exit 1
 fi
 
-if ! grep -q 'le on' "${workdir}/btmgmt.args"; then
-  echo "FAIL: LE was never enabled on the controller." >&2
-  cat "${workdir}/btmgmt.args" >&2
-  exit 1
+# Powering the radio and enabling LE are privileged; as root they must be
+# issued, and as an ordinary user they must not be attempted at all (btmgmt
+# cannot do them and has been seen to block instead of failing).
+if [[ "${EUID}" -eq 0 ]]; then
+  if ! grep -q 'le on' "${workdir}/btmgmt.args"; then
+    echo "FAIL: LE was never enabled on the controller." >&2
+    cat "${workdir}/btmgmt.args" >&2
+    exit 1
+  fi
+else
+  if grep -qE 'power on|le on' "${workdir}/btmgmt.args"; then
+    echo "FAIL: privileged btmgmt commands were attempted without root." >&2
+    cat "${workdir}/btmgmt.args" >&2
+    exit 1
+  fi
 fi
 
 # --- The helper must remain running while the scan is up ----------------------
@@ -113,7 +124,7 @@ if [[ -e "${saved_fifo}" ]]; then
   exit 1
 fi
 
-if ! grep -q 'stop-find' "${workdir}/btmgmt.args"; then
+if [[ "${EUID}" -eq 0 ]] && ! grep -q 'stop-find' "${workdir}/btmgmt.args"; then
   echo "FAIL: discovery was not stopped on the controller." >&2
   exit 1
 fi

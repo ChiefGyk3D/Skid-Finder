@@ -67,13 +67,23 @@ done
 load_config
 need_cmd btmon
 need_cmd hciconfig
-need_root
+need_capture_privileges
 
 resolved="$(mktemp)"
 tmpfile="$(mktemp)"
+fifo="$(mktemp -u "${TMPDIR:-/tmp}/foxhunt-XXXXXX.fifo")"
+PRODUCER_PID=""
 cleanup() {
+  # The radio producer (btmon or tshark) runs in the background feeding a
+  # FIFO, so it is ours to stop; a pipeline member would outlive a script
+  # killed by a signal and keep the radio busy.
+  if [[ -n "${PRODUCER_PID}" ]]; then
+    kill "${PRODUCER_PID}" 2>/dev/null || true
+    wait "${PRODUCER_PID}" 2>/dev/null || true
+    PRODUCER_PID=""
+  fi
   stop_le_scan "${IFACE}"
-  rm -f "${resolved}" "${tmpfile}" "${tmpfile}.new"
+  rm -f "${resolved}" "${tmpfile}" "${tmpfile}.new" "${fifo}"
 }
 
 if [[ -n "${HUNT_QUERY}" ]]; then
@@ -122,6 +132,8 @@ else
 fi
 
 trap cleanup EXIT
+# A signal must still run the EXIT trap, so the producer and the scan stop.
+trap 'exit 130' INT TERM
 
 echo "Tracking ${target_count} address(es) on ${IFACE}. Ctrl+C to stop."
 sed 's/^/  target: /' "${resolved}"
@@ -143,7 +155,42 @@ idle=5
 # both doubles the sample rate for no extra information, so only '>' blocks
 # are read. IGNORECASE is deliberately not used; it is a gawk extension and
 # these scripts also run under mawk on the uConsole image.
-stdbuf -oL btmon -i "${IFACE}" 2>/dev/null | awk -v targets="${resolved}" '
+# Producer: one "ADDRESS RSSI" line per advertisement from a target. With
+# root that is btmon's text; without it, tshark's field output from the
+# monitor channel (the unprivileged route lib.sh sets up), which carries
+# the same two values and needs no block parsing. The radio process runs
+# in the background into a FIFO so cleanup can stop it by pid.
+mkfifo -m 600 "${fifo}"
+if [[ "${CAPTURE_MODE}" == "unprivileged" ]]; then
+  tshark -i bluetooth-monitor -l -Y "${BLE_TSHARK_FILTER}" -T fields \
+    -e bthci_evt.bd_addr -e bthci_evt.rssi -E separator=/t -E occurrence=f \
+    > "${fifo}" 2>/dev/null &
+else
+  stdbuf -oL btmon -i "${IFACE}" > "${fifo}" 2>/dev/null &
+fi
+PRODUCER_PID=$!
+
+rssi_pairs() {
+  if [[ "${CAPTURE_MODE}" == "unprivileged" ]]; then
+    awk -F'\t' -v targets="${resolved}" '
+        BEGIN {
+          while ((getline line < targets) > 0) {
+            if (line != "") {
+              want[line] = 1
+            }
+          }
+          close(targets)
+        }
+        {
+          addr = toupper($1)
+          if ((addr in want) && ($2 ~ /^-?[0-9]+$/)) {
+            print addr, $2
+            fflush()
+          }
+        }' < "${fifo}"
+    return
+  fi
+  awk -v targets="${resolved}" '
   BEGIN {
     while ((getline line < targets) > 0) {
       if (line != "") {
@@ -179,7 +226,10 @@ stdbuf -oL btmon -i "${IFACE}" 2>/dev/null | awk -v targets="${resolved}" '
     }
     addr = ""
   }
-' | while :; do
+' < "${fifo}"
+}
+
+rssi_pairs | while :; do
   rc=0
   read -r -t "${idle}" addr rssi || rc=$?
 

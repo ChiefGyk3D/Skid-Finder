@@ -284,9 +284,11 @@ hci_address() {
   local iface="$1" addr=""
 
   if command -v btmgmt >/dev/null 2>&1; then
-    addr="$(btmgmt -i "${iface}" info 2>/dev/null \
+    # btmgmt is a bt_shell program; when it cannot do what it was asked it
+    # can sit in its event loop rather than exit, so every call is bounded.
+    addr="$(timeout 5 btmgmt -i "${iface}" info 2>/dev/null \
       | grep -oE 'addr ([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}' \
-      | head -n1 | awk '{print $2}')"
+      | head -n1 | awk '{print $2}' || true)"
   fi
 
   if [[ -z "${addr}" ]] && command -v hciconfig >/dev/null 2>&1; then
@@ -301,11 +303,14 @@ hci_address() {
 start_le_scan() {
   local iface="$1"
 
-  # Powering the radio and enabling LE are one-shot btmgmt commands; those work
-  # fine non-interactively because they exit immediately.
-  if command -v btmgmt >/dev/null 2>&1; then
-    btmgmt -i "${iface}" power on >/dev/null 2>&1 || true
-    btmgmt -i "${iface}" le on >/dev/null 2>&1 || true
+  # Powering the radio and enabling LE are privileged one-shot btmgmt
+  # commands. Only root can issue them; as an ordinary user btmgmt cannot,
+  # and has been seen to block instead of failing, so they are skipped on
+  # the unprivileged route (the adapter is already up if bluetoothd has it)
+  # and bounded even as root.
+  if [[ "${EUID}" -eq 0 ]] && command -v btmgmt >/dev/null 2>&1; then
+    timeout 5 btmgmt -i "${iface}" power on >/dev/null 2>&1 || true
+    timeout 5 btmgmt -i "${iface}" le on >/dev/null 2>&1 || true
   fi
 
   if ! command -v bluetoothctl >/dev/null 2>&1; then
@@ -373,8 +378,8 @@ stop_le_scan() {
     LE_SCAN_FIFO=""
   fi
 
-  if [[ -n "${iface}" ]] && command -v btmgmt >/dev/null 2>&1; then
-    btmgmt -i "${iface}" stop-find >/dev/null 2>&1 || true
+  if [[ -n "${iface}" && "${EUID}" -eq 0 ]] && command -v btmgmt >/dev/null 2>&1; then
+    timeout 5 btmgmt -i "${iface}" stop-find >/dev/null 2>&1 || true
   fi
 }
 
