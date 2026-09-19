@@ -82,9 +82,11 @@ while (( $# )); do
 done
 
 load_config
-need_cmd btmon
-need_cmd hciconfig
+# Listing the resolved targets needs no radio and no radio tools (a laptop
+# without bluez, or CI, can still read a handoff); everything else does.
 if (( LIST_ONLY == 0 )); then
+  need_cmd btmon
+  need_cmd hciconfig
   need_capture_privileges
 fi
 
