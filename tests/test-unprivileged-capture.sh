@@ -77,6 +77,46 @@ stop_capture_progress
 grep -q "unprivileged" "${workdir}/progress.txt" || fail "progress did not explain why counts are absent"
 if grep -q "nothing captured yet" "${workdir}/progress.txt"; then fail "progress raised the no-scan alarm on a capture that cannot be counted yet"; fi
 
+# --- The live path streams tshark fields and keeps a trace ----------------------------
+python3 "${ROOT_DIR}/tests/make-fixture.py" --mode spam --format tshark --duration 30 --output "${workdir}/spam.tsv"
+cat > "${workdir}/bin/tshark" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "${workdir}/tshark.args"
+if [[ "\$1" == "-D" ]]; then printf '6. bluetooth-monitor\n'; exit 0; fi
+if [[ " \$* " == *" -T fields "* ]]; then
+  while :; do cat "${workdir}/spam.tsv"; sleep 0.5; done
+fi
+# trace writer: write until interrupted
+while (( \$# )); do [[ "\$1" == "-w" ]] && out="\$2"; shift; done
+trap 'echo pcapng-bytes > "\$out"; exit 0' INT TERM
+while :; do sleep 0.2; done
+STUB
+chmod +x "${workdir}/bin/tshark"
+: > "${workdir}/tshark.args"
+
+start_unprivileged_trace "${workdir}/live.btsnoop"
+run_live_pipeline hci0 3 "${workdir}/live.btsnoop" "${workdir}/live-obs.jsonl" \
+  --sensor-id sensor-U -- --profile balanced --config /dev/null --window 30 --interval 1 \
+  > "${workdir}/live-alerts.txt" 2> "${workdir}/live-alerts.err"
+stop_unprivileged_trace "${workdir}/live.btsnoop"
+
+grep -q -- "-i bluetooth-monitor -l -Y" "${workdir}/tshark.args" || fail "live path did not stream tshark fields from bluetooth-monitor"
+grep -q -- "-e frame.time_epoch -e bthci_evt.le_meta_subevent" "${workdir}/tshark.args" || fail "live tshark field list does not match the parser"
+if grep -q -- "-Y.*-w \|-w.*-Y" "${workdir}/tshark.args"; then fail "a display filter and -w were combined on one live tshark, which tshark refuses"; fi
+grep -q -- "-q -w ${workdir}/live.pcapng" "${workdir}/tshark.args" || fail "no separate trace writer was started"
+[[ -s "${workdir}/live.btsnoop" ]] || fail "trace was not converted to btsnoop when the run stopped"
+[[ -e "${workdir}/live.pcapng" ]] && fail "pcapng was left behind after conversion"
+python3 - "${workdir}/live-obs.jsonl" <<'PY'
+import json, sys, time
+rows = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
+assert rows, "no observations from the live tshark path"
+assert all(r["ts_absolute"] is True for r in rows), "tshark timestamps are absolute and must be marked so"
+assert all(r["sensor_id"] == "sensor-U" for r in rows)
+assert any(r["addr_class"] == "resolvable" for r in rows), "address class was not derived from the address bits"
+print("live tshark observations ok: %d" % len(rows))
+PY
+grep -q "  ALERT " "${workdir}/live-alerts.txt" || { cat "${workdir}/live-alerts.txt" "${workdir}/live-alerts.err" >&2; fail "live alerter did not fire on the tshark-format spam stream"; }
+
 # --- Without the route, the gate refuses with the fix ---------------------------------
 mkdir -p "${workdir}/nobin"
 for tool in grep mktemp dirname; do ln -sf "$(command -v "${tool}")" "${workdir}/nobin/${tool}"; done

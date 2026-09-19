@@ -35,12 +35,7 @@ need_cmd btmon
 need_cmd python3
 need_cmd stdbuf
 need_cmd tee
-if [[ "${EUID}" -ne 0 ]]; then
-  echo "Run as root (sudo). Live alerting streams btmon as it happens, which the" >&2
-  echo "unprivileged pcapng path cannot do; capture-btmon.sh and ble-field-run.sh" >&2
-  echo "work without root on a laptop in the wireshark group." >&2
-  exit 1
-fi
+need_capture_privileges
 
 IFACE="${1:-}"
 DURATION="${2:-0}"
@@ -94,7 +89,7 @@ stop_publisher() {
   wait "${PUBLISH_PID}" 2>/dev/null || true
   PUBLISH_PID=""
 }
-trap 'stop_publisher; stop_le_scan "${IFACE}"' EXIT
+trap 'stop_publisher; stop_unprivileged_trace "${TRACE}"; stop_le_scan "${IFACE}"' EXIT
 
 # Sensor-net transport: when a broker is configured, ship the records as
 # they are written. The publisher tails the files, so a broker outage never
@@ -108,6 +103,9 @@ if [[ -n "${MQTT_HOST:-}" ]]; then
 fi
 
 start_le_scan "${IFACE}"
+if [[ "${CAPTURE_MODE}" == "unprivileged" ]]; then
+  start_unprivileged_trace "${TRACE}"
+fi
 
 run_live_pipeline "${IFACE}" "${DURATION}" "${TRACE}" "${OBS}" \
   --sensor-id "${SENSOR_ID:-unknown}" \
@@ -119,6 +117,7 @@ run_live_pipeline "${IFACE}" "${DURATION}" "${TRACE}" "${OBS}" \
   --jsonl-out "${ALERTS}"
 
 stop_le_scan "${IFACE}"
+stop_unprivileged_trace "${TRACE}"
 # Give the publisher one more pass over the files before it goes.
 if [[ -n "${PUBLISH_PID}" ]]; then
   sleep 1
