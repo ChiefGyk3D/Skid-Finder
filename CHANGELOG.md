@@ -9,6 +9,15 @@ would break.
 
 ## [Unreleased]
 
+### Changed
+- Fingerprints (identity keys `fp:…`) are version 2: built from Bluetooth
+  SIG company ids and a normalised PDU class instead of vendor strings and
+  the flags byte, so the btmon and tshark capture paths file the same
+  device under the same key (asserted for identity, spam and ambient
+  traffic in the fingerprint test). Records gain `company_ids`; the tshark
+  path labels the common vendors by name. Keys from an older
+  `logs/sightings.json` no longer match; the history rebuilds itself.
+
 ## [0.5.0-alpha.1] — 2026-09-19
 
 **Alpha.** Everything below was exercised on a laptop's real adapter

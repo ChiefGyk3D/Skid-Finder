@@ -101,6 +101,10 @@ class AdRecord:
     flags: str = ""
     data_length: Optional[int] = None
     companies: List[str] = field(default_factory=list)
+    # Bluetooth SIG company identifiers as '0x004c'. btmon prints the name
+    # and the number; tshark prints only the number. Identity keys are built
+    # from these so both capture paths file a device under the same key.
+    company_ids: List[str] = field(default_factory=list)
     service_uuids: List[str] = field(default_factory=list)
     # Set by consumers that already know the identity key (the collector,
     # from the observation record); None means "derive it".
@@ -211,6 +215,7 @@ def iter_records(lines: Iterable[str]) -> Iterator[AdRecord]:
         company_match = COMPANY_RE.match(line)
         if company_match:
             current.companies.append(company_match.group(1).strip().lower())
+            current.company_ids.append(f"0x{int(company_match.group(2)):04x}")
             continue
 
         manuf_match = MANUF_RE.match(line)
@@ -241,8 +246,15 @@ def iter_records(lines: Iterable[str]) -> Iterator[AdRecord]:
             continue
 
         pdu_match = PDU_RE.match(line)
-        if pdu_match and not current.pdu_type:
-            current.pdu_type = pdu_match.group(1).strip()
+        if pdu_match:
+            # Normalise to the PDU name so the tshark path, which only has
+            # the event type, produces the same value. 'Legacy PDU Type:
+            # ADV_IND (0x0013)' wins over an earlier 'Event type: 0x0013'.
+            value = pdu_match.group(1).strip()
+            if line.lstrip().startswith("Legacy PDU Type"):
+                current.pdu_type = value.split(" (")[0].strip()
+            elif not current.pdu_type:
+                current.pdu_type = LEGACY_PDU_BY_EVENT_TYPE.get(value.lower(), value)
             continue
 
     if current is not None and current.address:
@@ -276,6 +288,39 @@ TSHARK_FILTER = "bthci_evt.le_meta_subevent == 0x02 || bthci_evt.le_meta_subeven
 
 def _split_list(text: str) -> List[str]:
     return [t.strip() for t in text.split(",") if t.strip()]
+
+
+# The SIG names btmon prints for the vendors that dominate a conference
+# floor, so the tshark path can label them the same way. Anything else is
+# reported by id alone; the identity key never depends on the name.
+COMPANY_NAMES = {
+    "0x0002": "intel corp.",
+    "0x0006": "microsoft",
+    "0x004c": "apple, inc.",
+    "0x0059": "nordic semiconductor asa",
+    "0x0075": "samsung electronics co. ltd.",
+    "0x0087": "garmin international, inc.",
+    "0x009e": "bose corporation",
+    "0x00e0": "google",
+    "0x012d": "sony corporation",
+    "0x0171": "amazon.com services llc",
+    "0x0224": "fitbit, inc.",
+    "0x027d": "huawei technologies co., ltd.",
+    "0x038f": "xiaomi inc.",
+}
+
+# Extended advertising report event types for legacy PDUs, as the LE
+# Extended Advertising Report encodes them, mapped to the PDU names btmon
+# prints ('Legacy PDU Type: ADV_IND (0x0013)'), so a PDU class means the
+# same thing whichever tool saw it.
+LEGACY_PDU_BY_EVENT_TYPE = {
+    "0x0013": "ADV_IND",
+    "0x0015": "ADV_DIRECT_IND",
+    "0x0012": "ADV_SCAN_IND",
+    "0x0010": "ADV_NONCONN_IND",
+    "0x001b": "SCAN_RSP",
+    "0x001a": "SCAN_RSP",
+}
 
 
 def classify_random_address(address: str) -> str:
@@ -329,15 +374,31 @@ def parse_tshark_line(line: str) -> Optional[AdRecord]:
     # regex already matches that spelling for Apple. Fingerprints computed
     # from this path therefore differ from btmon's ('apple, inc.') for the
     # same device, which docs/README record.
-    record.companies = [c.lower() for c in _split_list(parts[6])]
-    record.service_uuids = [u.lower().replace("0x", "") for u in _split_list(parts[7])]
+    ids = []
+    for raw_id in _split_list(parts[6]):
+        try:
+            ids.append(f"0x{int(raw_id, 0):04x}")
+        except ValueError:
+            continue
+    record.company_ids = ids
+    record.companies = [COMPANY_NAMES.get(i, i) for i in ids]
+    # Same spelling as the btmon path ('0xfe2c'), so service data lands in
+    # the fingerprint identically.
+    uuids = []
+    for raw in _split_list(parts[7]):
+        try:
+            uuids.append(f"0x{int(raw, 0):04x}")
+        except ValueError:
+            uuids.append(raw.lower())
+    record.service_uuids = uuids
 
-    ext = parts[9].strip()
-    legacy = parts[10].strip()
+    ext = parts[9].strip().lower()
+    legacy = parts[10].strip().lower()
     if ext:
-        record.pdu_type = "ext:" + ext.lower()
+        record.pdu_type = LEGACY_PDU_BY_EVENT_TYPE.get(ext, "ext:" + ext)
     elif legacy:
-        record.pdu_type = "legacy:" + legacy.lower()
+        record.pdu_type = {"0x00": "ADV_IND", "0x01": "ADV_DIRECT_IND", "0x02": "ADV_SCAN_IND",
+                           "0x03": "ADV_NONCONN_IND", "0x04": "SCAN_RSP"}.get(legacy, "legacy:" + legacy)
     length = parts[11].strip()
     if length.isdigit():
         record.data_length = int(length)

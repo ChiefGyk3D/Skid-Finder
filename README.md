@@ -194,10 +194,12 @@ same stream. When the unprivileged route is available the menu drops `sudo` from
 BLE actions automatically; Wi-Fi and the AIO profiles keep it. Differences
 from the root path: the batch captures render their text
 log when the capture ends (so running counts are not shown), the monitor
-channel carries every adapter rather than one, and the content fingerprint
-of a device differs between the two paths because tshark names a vendor by
-id (`0x004c`) where btmon names it (`apple, inc.`). Wi-Fi monitor mode
-still needs root.
+channel carries every adapter rather than one. A device's identity key is
+the same whichever path heard it: fingerprints
+are built from vendor ids and a normalised PDU class rather than the
+strings each tool spells differently, so a laptop and a uConsole in one
+sensor net file a device under one key. Wi-Fi monitor mode still needs
+root.
 
 Measured on a Parrot 7.3 laptop on 2026-09-18: a 30 s unprivileged capture
 rendered 74 advertising reports and matched no signature on any profile

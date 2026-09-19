@@ -42,6 +42,7 @@ def record_from_event(event):
         name=event.get("name", "") or "",
         flags=event.get("flags", "") or "",
         companies=list(event.get("companies", []) or []),
+        company_ids=list(event.get("company_ids", []) or []),
         service_uuids=list(event.get("service_uuids", []) or []),
     )
 
