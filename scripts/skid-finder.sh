@@ -252,7 +252,7 @@ doctor() {
   if [[ "${EUID}" -eq 0 ]]; then
     pass "running as root: every path available"
   else
-    if id -nG 2>/dev/null | tr ' ' '\n' | grep -qx wireshark; then pass "in the wireshark group"; else warn "not in the wireshark group: sudo usermod -aG wireshark \$USER, then log in again"; fi
+    if { id -nG 2>/dev/null || true; } | tr ' ' '\n' | grep -qx wireshark; then pass "in the wireshark group"; else warn "not in the wireshark group: sudo usermod -aG wireshark \$USER, then log in again"; fi
     if unprivileged_capture_available; then
       pass "BLE capture and live alerting work without root (tshark bluetooth-monitor)"
     else
@@ -263,9 +263,14 @@ doctor() {
 
   echo
   echo "Bluetooth adapters"
+  # Every probe below may fail on a machine that lacks the tool (CI has no
+  # bluez); under 'set -e' a failing command substitution would abort the
+  # report, so each one ends in '|| true' and reports what it can.
   local adapters
-  adapters="$(hciconfig 2>/dev/null | grep -E '^hci[0-9]+:' | awk '{print $1}' | tr -d ':' | tr '\n' ' ')"
-  if [[ -n "${adapters}" ]]; then
+  adapters="$(hciconfig 2>/dev/null | grep -E '^hci[0-9]+:' | awk '{print $1}' | tr -d ':' | tr '\n' ' ' || true)"
+  if ! command -v hciconfig >/dev/null 2>&1; then
+    miss "hciconfig missing (bluez), cannot list adapters"
+  elif [[ -n "${adapters}" ]]; then
     pass "found: ${adapters}"
     local a
     for a in ${adapters}; do
@@ -300,7 +305,7 @@ doctor() {
   if [[ -f "${ROOT_DIR}/config/wifi-signatures.conf" ]]; then pass "config/wifi-signatures.conf"; else warn "config/wifi-signatures.conf missing (built-in Wi-Fi thresholds apply): cp config/wifi-signatures.conf.example config/wifi-signatures.conf"; fi
   if [[ -w "${ROOT_DIR}/logs" ]] || [[ ! -e "${ROOT_DIR}/logs" && -w "${ROOT_DIR}" ]]; then pass "logs/ is writable"; else miss "logs/ is not writable by $(id -un): chown it, or run from a copy you own"; fi
   local rootowned
-  rootowned="$(find "${ROOT_DIR}/logs" -maxdepth 1 -user root 2>/dev/null | head -n 1)"
+  rootowned="$(find "${ROOT_DIR}/logs" -maxdepth 1 -user root 2>/dev/null | head -n 1 || true)"
   if [[ -n "${rootowned}" ]]; then warn "root-owned files under logs/ (from sudo runs); analysis tools may fail to update them: sudo chown -R $(id -un) logs"; fi
 
   echo
