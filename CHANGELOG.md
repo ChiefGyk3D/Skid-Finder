@@ -9,11 +9,13 @@ would break.
 
 ## [Unreleased]
 
-### Changed
-- The BLE and Wi-Fi live alerters share one windowing loop
-  (`scripts/live_window.py`); each is now a small adapter naming its
-  record type, detector and wording. No change in behaviour or output; a
-  third modality adds an adapter rather than a copy of the loop.
+## [0.5.0-alpha.1] — 2026-09-19
+
+**Alpha.** Everything below was exercised on a laptop's real adapter
+without root or with stubbed tools in CI; the uConsole checklist is
+unchanged. This is the version where the whole BLE workflow (capture,
+field run, live alerting, foxhunt) runs on any laptop in the `wireshark`
+group with no `sudo`, and where a SOC gets one incident per flood.
 
 ### Added
 - `SECURITY.md` (what counts as a security report for a receive-only tool,
@@ -41,14 +43,16 @@ would break.
   from tshark's `bluetooth-monitor` stream when not root, so the whole
   BLE workflow (capture, field run, live alerting, foxhunt) runs on a
   laptop in the `wireshark` group without `sudo`.
-
-### Added
 - `./scripts/skid-finder.sh --doctor` (and the `doctor` menu entry): tools,
   privileges (including whether the unprivileged BLE route works here),
   adapters, Wi-Fi interface and monitor-mode capability, default-route
   warning, config files, root-owned logs. Every miss carries its fix.
 
 ### Changed
+- The BLE and Wi-Fi live alerters share one windowing loop
+  (`scripts/live_window.py`); each is now a small adapter naming its
+  record type, detector and wording. No change in behaviour or output; a
+  third modality adds an adapter rather than a copy of the loop.
 - The menu prefixes `sudo` on BLE actions only when the unprivileged
   capture route is unavailable; Wi-Fi and AIO actions always get it.
 
@@ -197,7 +201,8 @@ this into a beta is in `docs/ROADMAP.md`.
 - Detector false positives on ordinary crowds: rules now key on address
   reuse shape, not on volume or on the random-address ratio.
 
-[Unreleased]: https://github.com/ChiefGyk3D/Skid-Finder/compare/v0.4.0-alpha.1...HEAD
+[Unreleased]: https://github.com/ChiefGyk3D/Skid-Finder/compare/v0.5.0-alpha.1...HEAD
+[0.5.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.5.0-alpha.1
 [0.4.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.4.0-alpha.1
 [0.3.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.3.0-alpha.1
 [0.2.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.2.0-alpha.1
