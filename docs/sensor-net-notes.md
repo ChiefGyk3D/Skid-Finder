@@ -128,6 +128,20 @@ The build order, weakest assumptions last, and where it stands:
    calibration and is the first step whose output can mislead if the caveats
    above are ignored. It stays behind hardware validation.
 
+## Incidents
+
+An evaluation fires every few seconds while a flood runs; paging on each
+one is noise. The collector groups them: an incident opens on the first
+evaluation with a match, absorbs every later match (sensors and the
+families each reported, peak rate, the loudest sensor, the location
+estimate at every step, the identities the matching sensors heard with
+their tiers), and closes once the fleet has been quiet for
+`--incident-quiet` seconds (default 60; note the detector's window keeps a
+flood "visible" for a window length after it stops). `--incidents-out`
+appends one `fleet-incident/1` record on open and one on close; the open
+incident also rides in `fleet-state/1` under `incident`. Its identities are
+what the matching sensors heard, not attribution, and the record says so.
+
 ## Wi-Fi (later)
 
 The `modality` field and the module split exist so a Wi-Fi capture frontend can

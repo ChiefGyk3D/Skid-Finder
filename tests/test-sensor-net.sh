@@ -23,6 +23,7 @@ python3 "${ROOT_DIR}/scripts/ble-collector.py" \
   --input "${TMP}"/fx/obs-*.jsonl "${TMP}/fx/alerts-A.jsonl" \
   --window 30 --interval 5 --profile balanced --config /dev/null \
   --state "${TMP}/state.json" --alerts-out "${TMP}/fleet-alerts.jsonl" \
+  --incidents-out "${TMP}/incidents.jsonl" --incident-quiet 10 \
   > "${TMP}/collector.out" 2> "${TMP}/collector.err"
 
 python3 - "${TMP}" "${ROOT_DIR}" <<'PY'
@@ -85,6 +86,29 @@ print("offline merge ok: %d identities, %d fleet alerts, device placed %.0f m fr
 PY
 
 grep -q "ALERT A:" "${TMP}/collector.out" || fail "collector summary never printed an ALERT line for A"
+
+# --- Incidents: one flood, one ticket ------------------------------------------
+python3 - "${TMP}/incidents.jsonl" <<'PY'
+import json, sys
+rows = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
+assert rows, "no incident records were written"
+assert all(r["schema"] == "fleet-incident/1" for r in rows)
+opened = [r for r in rows if r["status"] == "open"]
+closed = [r for r in rows if r["status"] == "closed"]
+assert len(opened) == 1, f"one flood must open exactly one incident, got {len(opened)}"
+assert len(closed) == 1, f"the incident must close exactly once, got {len(closed)}"
+assert opened[0]["id"] == closed[0]["id"]
+BASE = 1758200000.0
+assert opened[0]["first_seen"] >= BASE + 15, "incident opened before the flood started"
+inc = closed[0]
+assert "A" in inc["sensors"] and inc["loudest"] == "A", inc["sensors"]
+assert inc["duration_sec"] >= 25, f"a 30 s flood produced a {inc['duration_sec']} s incident"
+assert inc["location"] and inc["location"]["track_points"] >= 3, "no location track"
+assert inc["identities"] and all(i["tier"] in ("strong", "session", "model", "ambiguous") for i in inc["identities"])
+assert "not attribution" in inc["note"]
+print("incidents ok: one open, one close, %d s, %d track points" % (inc["duration_sec"], inc["location"]["track_points"]))
+PY
+grep -q "INCIDENT inc-" "${TMP}/collector.out" || fail "collector summary never printed the incident"
 
 # --- Directory watch --------------------------------------------------------------
 python3 "${ROOT_DIR}/scripts/ble-collector.py" --watch "${TMP}/fx" --interval 1 --max-evals 2 \

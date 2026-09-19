@@ -77,6 +77,16 @@ a gap is how you know it is not.
 strings the batch scanner prints, so a rule keyed on `matches[].name` fires
 identically from a live sensor and from a scan of a saved capture.
 
+## `fleet-incident/1` — one ticket per flood
+
+The collector groups related fleet alerts into incidents
+(`--incidents-out`): one record when an incident opens and one when it
+closes, with `id`, `first_seen`, `last_seen`, `duration_sec`, the sensors
+involved and the families each reported, `loudest`, `peak_rate`, the last
+location estimate and how many track points it has, and the top
+identities the matching sensors heard with their tiers. This is the record
+to page on and to wrap in a ticket; alerts are the evidence behind it.
+
 ## Shipping the files
 
 The files are plain JSON Lines, so any shipper that reads JSON logs works.

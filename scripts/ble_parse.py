@@ -102,6 +102,9 @@ class AdRecord:
     data_length: Optional[int] = None
     companies: List[str] = field(default_factory=list)
     service_uuids: List[str] = field(default_factory=list)
+    # Set by consumers that already know the identity key (the collector,
+    # from the observation record); None means "derive it".
+    identity_key: Optional[str] = None
 
     @property
     def is_random(self) -> bool:

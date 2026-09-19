@@ -17,6 +17,12 @@ would break.
   evidence handoff).
 - CI runs the suite on Python 3.11 (Raspberry Pi OS bookworm) and 3.13
   (Debian 13, Parrot, Ubuntu 26.04).
+- `fleet-incident/1`: the collector groups a run of related fleet alerts
+  into one incident (open on the first match, closed after
+  `--incident-quiet` seconds without one), carrying sensors and families,
+  the loudest sensor, peak rate, the location track, and the identities
+  the matching sensors heard with their tiers. `--incidents-out` writes
+  the open and close records; the open incident rides in `fleet-state/1`.
 - `./scripts/skid-finder.sh --doctor` (and the `doctor` menu entry): tools,
   privileges (including whether the unprivileged BLE route works here),
   adapters, Wi-Fi interface and monitor-mode capability, default-route
