@@ -205,7 +205,7 @@ class Incident:
         self.loudest = None
         self.peak_rate = 0.0
         self.track = []          # [(ts, lat, lon, spread_m)]
-        self.identities = {}     # key -> {"tier", "name", "count"}
+        self.identities = {}     # key -> {"tier", "name", "count", "addresses"}
 
     def absorb(self, now, matching, flood, identities_out, fleet):
         self.last_seen = now
@@ -223,14 +223,30 @@ class Incident:
                 ident = fleet.identities.get(fleet.key_for_record(rec))
                 if ident is None:
                     continue
-                slot = self.identities.setdefault(ident.key, {"tier": ident.tier, "name": ident.name, "count": 0})
+                slot = self.identities.setdefault(ident.key, {"tier": ident.tier, "name": ident.name,
+                                                              "count": 0, "addresses": set()})
                 slot["count"] += 1
+                # The addresses this identity used while the incident ran are
+                # what a handheld can actually track; a fingerprint is not an
+                # address. Capped so a rotating flood does not carry thousands.
+                if len(slot["addresses"]) < 20:
+                    slot["addresses"].add(rec.address.upper())
         if flood and flood.get("location"):
             loc = flood["location"]
             self.track.append((now, loc["lat"], loc["lon"], loc["spread_m"]))
 
     def record(self, status, now):
         top = sorted(self.identities.items(), key=lambda kv: -kv[1]["count"])[:10]
+        # Foxhunt handoff: the addresses of the identities most seen by the
+        # matching sensors, most recent identities first, capped. Loaded by
+        # foxhunt-rssi.sh --from-incident. Rotating (model-tier) identities
+        # contribute their last few addresses, which go stale within minutes;
+        # the tier is printed beside each so the hunter knows which to trust.
+        rank = {"strong": 3, "session": 2, "model": 1, "ambiguous": 0}
+        targets = []
+        for key, v in sorted(self.identities.items(), key=lambda kv: (-rank.get(kv[1]["tier"], 0), -kv[1]["count"])):
+            for addr in sorted(v["addresses"])[-5:]:
+                targets.append({"address": addr, "identity_key": key, "tier": v["tier"], "name": v["name"]})
         return {
             "schema": INCIDENT_SCHEMA,
             "id": self.id,
@@ -253,6 +269,7 @@ class Incident:
             },
             "identities": [{"key": k, "tier": v["tier"], "name": v["name"], "count": v["count"]}
                            for k, v in top],
+            "targets": targets[:40],
             "note": "a run of related fleet alerts; identities are what the matching sensors heard, "
                     "not attribution. model-tier keys are products, possibly several people.",
         }

@@ -76,7 +76,7 @@ ACTIONS=(
   "wifi-capture|Passive Wi-Fi capture to logs/ (monitor mode)|[iface] [seconds]"
   "wifi-live|Live Wi-Fi attack alerts until Ctrl+C|[iface] [seconds] [profile]"
   "wifi-scan|Wi-Fi signature scan of the latest capture|[capture] [profile]"
-  "hunt|Foxhunt a target by MAC, or by name from the latest capture|<mac-or-name> [iface]"
+  "hunt|Foxhunt a target by MAC, by name from the latest capture, or 'incident' for the collector's handoff|<mac-or-name|incident> [iface]"
   "fingerprint|Identify and track devices in the latest capture|[capture]"
   "scan|Signature scan of the latest capture|[capture] [profile]"
   "mode|Set adapter mode|<dual|single|auto>"
@@ -155,6 +155,13 @@ build_command() {
       fi
       if [[ "${target}" =~ ^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$ ]]; then
         cmd=("${SUDO}" "${SCRIPT_DIR}/foxhunt-rssi.sh" "${target}" "${iface}")
+      elif [[ "${target}" == "incident" ]]; then
+        local inc="${ROOT_DIR}/logs/fleet-incidents.jsonl"
+        if [[ ! -s "${inc}" ]]; then
+          echo "no incidents recorded at ${inc}; the collector writes it with --incidents-out." >&2
+          return 2
+        fi
+        cmd=("${SUDO}" "${SCRIPT_DIR}/foxhunt-rssi.sh" --from-incident "${inc}" --iface "${iface}")
       else
         local capture
         capture="$(latest_capture)"
@@ -407,7 +414,7 @@ interactive() {
         a2="$(ask "Live" "Seconds (0 = until Ctrl+C)" "0")"
         a3="$(choose "Live" "Sensitivity profile" balanced "default" aggressive "short windows, more alerts" conservative "needs a long window")" ;;
       hunt)
-        a1="$(ask "Foxhunt" "Target MAC, or a name/vendor/serial to resolve from the latest capture" "")"
+        a1="$(ask "Foxhunt" "Target MAC, a name/vendor/serial from the latest capture, or 'incident' for the collector's handoff" "")"
         a2="$(ask "Foxhunt" "Adapter" "${HUNT_HCI}")" ;;
       scan)
         a1="$(ask "Scan" "Capture file (blank = latest)" "")"

@@ -9,6 +9,13 @@ would break.
 
 ## [Unreleased]
 
+### Added
+- Foxhunt handoff: `fleet-incident/1` records carry `targets` (the
+  addresses each involved identity used during the incident, reliable
+  tiers first, capped), and `foxhunt-rssi.sh --from-incident FILE [--id]`
+  loads them; `--list-targets` prints the set without touching the radio.
+  The menu's foxhunt prompt accepts `incident`.
+
 ### Changed
 - Fingerprints (identity keys `fp:…`) are version 2: built from Bluetooth
   SIG company ids and a normalised PDU class instead of vendor strings and

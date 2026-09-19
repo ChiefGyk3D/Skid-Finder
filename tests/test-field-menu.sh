@@ -116,6 +116,14 @@ if "${MENU}" --print hunt flipper > /dev/null 2> "${workdir}/err.txt"; then
 fi
 grep -q "no capture" "${workdir}/err.txt" || fail "name hunt refusal does not say why"
 
+# The collector's handoff: 'incident' resolves to --from-incident, and refuses
+# cleanly when nothing has been recorded.
+"${MENU}" --print hunt incident > /dev/null 2>&1 && fail "hunt incident with no incidents file should refuse"
+echo '{"schema":"fleet-incident/1"}' > "${workdir}/root/logs/fleet-incidents.jsonl"
+out="$("${MENU}" --print hunt incident)"
+[[ "${out}" == *"foxhunt-rssi.sh --from-incident "*"fleet-incidents.jsonl --iface hci8" ]] || fail "hunt incident malformed: ${out}"
+rm -f "${workdir}/root/logs/fleet-incidents.jsonl"
+
 # Same for the two analysis actions that need a capture.
 for action in fingerprint scan; do
   if "${MENU}" --print "${action}" > /dev/null 2>&1; then
