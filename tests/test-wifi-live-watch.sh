@@ -68,7 +68,8 @@ for line in open(sys.argv[1]):
     assert e["schema"] == "wifi-obs/1" and e["modality"] == "wifi"
     assert e["sensor_id"] == "sensor-W"
     assert e["ts_absolute"] is True
-    assert e["tier"] in ("strong", "session") and e["identity_key"].startswith("addr:")
+    assert e["tier"] in ("strong", "session", "model")
+    assert e["identity_key"].startswith(("addr:", "fp:wifi:"))
     n += 1
 print("wifi observations ok: %d" % n)
 PY

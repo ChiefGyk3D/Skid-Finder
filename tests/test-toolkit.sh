@@ -38,6 +38,7 @@ python3 "${ROOT_DIR}/tests/test-detector-metrics.py" --modality wifi
 "${ROOT_DIR}/tests/test-evidence-bundle.sh"
 "${ROOT_DIR}/tests/test-sensor-net.sh"
 "${ROOT_DIR}/tests/test-wifi-signatures.sh"
+"${ROOT_DIR}/tests/test-wifi-fingerprint.sh"
 "${ROOT_DIR}/tests/test-wifi-live-watch.sh"
 
 echo "Toolkit validation smoke test passed."

@@ -721,7 +721,13 @@ WIFI_TSHARK_FIELDS=(
   -e wlan_radio.signal_dbm
   -e wlan_radio.channel
   -e wlan.fixed.reason_code
+  -e wlan.tag.number
+  -e wlan.supported_rates
+  -e wlan.ht.capabilities
+  -e wlan.tag.oui
 )
+# Every occurrence, comma-joined: the last four fields are lists.
+WIFI_TSHARK_FIELD_OPTS=(-E separator=/t -E occurrence=a -E 'aggregator=,')
 # Management frames only (type 0); data frames carry people's traffic and the
 # detector does not need them.
 WIFI_TSHARK_FILTER="wlan.fc.type == 0"
@@ -788,7 +794,7 @@ stop_channel_hop() {
 wifi_fields_from_pcap() {
   local pcap="$1"
   tshark -r "${pcap}" -Y "${WIFI_TSHARK_FILTER}" -T fields "${WIFI_TSHARK_FIELDS[@]}" \
-    -E separator=/t -E occurrence=f 2>/dev/null
+    "${WIFI_TSHARK_FIELD_OPTS[@]}" 2>/dev/null
 }
 
 # Live pipeline: tshark -> wifi-observe.py --stream -> wifi-live-alert.py.
@@ -822,7 +828,7 @@ run_wifi_live_pipeline() {
   fi
   # -l flushes per packet, the tshark equivalent of stdbuf -oL.
   cmd+=(tshark -i "${iface}" -l -Y "${WIFI_TSHARK_FILTER}" -T fields "${WIFI_TSHARK_FIELDS[@]}"
-        -E separator=/t -E occurrence=f)
+        "${WIFI_TSHARK_FIELD_OPTS[@]}")
 
   local rc=0
   "${cmd[@]}" 2>/dev/null \

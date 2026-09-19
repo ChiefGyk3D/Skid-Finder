@@ -76,6 +76,7 @@ ACTIONS=(
   "wifi-capture|Passive Wi-Fi capture to logs/ (monitor mode)|[iface] [seconds]"
   "wifi-live|Live Wi-Fi attack alerts until Ctrl+C|[iface] [seconds] [profile]"
   "wifi-scan|Wi-Fi signature scan of the latest capture|[capture] [profile]"
+  "wifi-fingerprint|Identify and track Wi-Fi senders in the latest capture|[capture]"
   "hunt|Foxhunt a target by MAC, or by name from the latest capture|<mac-or-name> [iface]"
   "fingerprint|Identify and track devices in the latest capture|[capture]"
   "scan|Signature scan of the latest capture|[capture] [profile]"
@@ -137,14 +138,18 @@ build_command() {
         cmd=("${SUDO}" "${SCRIPT_DIR}/wifi-live-watch.sh" "${wiface}" "${2:-0}" "${3:-balanced}")
       fi
       ;;
-    wifi-scan)
+    wifi-scan|wifi-fingerprint)
       local wcap="${1:-$(ls -1t "${ROOT_DIR}"/logs/wifi-*.tsv 2>/dev/null | head -n 1 || true)}"
       if [[ -z "${wcap}" ]]; then
-        echo "no Wi-Fi capture in logs/ to scan; run a Wi-Fi capture first." >&2
+        echo "no Wi-Fi capture in logs/; run a Wi-Fi capture first." >&2
         return 2
       fi
-      cmd=(python3 "${SCRIPT_DIR}/wifi-signature-scan.py" --input "${wcap}")
-      [[ -n "${2:-}" ]] && cmd+=(--profile "$2")
+      if [[ "${action}" == "wifi-fingerprint" ]]; then
+        cmd=("${SCRIPT_DIR}/wifi-fingerprint.py" --input "${wcap}")
+      else
+        cmd=(python3 "${SCRIPT_DIR}/wifi-signature-scan.py" --input "${wcap}")
+        [[ -n "${2:-}" ]] && cmd+=(--profile "$2")
+      fi
       ;;
     hunt)
       local target="${1:-}"
@@ -396,6 +401,8 @@ interactive() {
         a1="$(ask "Wi-Fi live" "Wi-Fi interface" "${WIFI_IFACE}")"
         a2="$(ask "Wi-Fi live" "Seconds (0 = until Ctrl+C)" "0")"
         a3="$(choose "Wi-Fi live" "Sensitivity profile" balanced "default" aggressive "more alerts" conservative "fewer alerts")" ;;
+      wifi-fingerprint)
+        a1="$(ask "Wi-Fi fingerprint" "Capture file (blank = latest)" "")" ;;
       wifi-scan)
         a1="$(ask "Wi-Fi scan" "Capture file (blank = latest)" "")"
         a2="$(choose "Wi-Fi scan" "Profile" balanced "default" conservative "fewer alerts" aggressive "more alerts")" ;;

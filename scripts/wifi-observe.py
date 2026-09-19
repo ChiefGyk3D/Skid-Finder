@@ -8,13 +8,11 @@ collector, the publisher and a SIEM handle both modalities with one set of
 fields, plus the Wi-Fi specifics: frame kind, bssid, da, ssid, channel and
 reason code.
 
-Identity, stated plainly. A globally administered MAC (an access point's
-BSSID, an older client) is a stable identity: tier strong, key addr:<mac>.
-A locally administered MAC is a randomised client address, stable for a
-session with one network and rotated afterwards: tier session, key
-addr:<mac>. Nothing here claims to link a randomised address across
-rotations; probe-request fingerprinting (SSID lists, tagged-parameter
-order) is the later work that would, and it stays model-tier when it lands.
+Identity comes from wifi_identity: a globally administered MAC is tier
+strong; a randomised MAC on a probe request or a beacon is keyed by its
+content fingerprint (tag order, rates, HT capabilities, vendor OUIs) at
+tier model, which identifies a product or a tool rather than a unit; a
+randomised MAC on any other frame is tier session.
 
 Timestamps are absolute: tshark's frame.time_epoch already is, so there is
 no --epoch-base here.
@@ -28,21 +26,14 @@ import json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import wifi_parse  # noqa: E402
 from skid_conf import read_conf, setting  # noqa: E402
+from wifi_identity import fingerprint, has_content, identity_key  # noqa: E402
 
 SCHEMA = "wifi-obs/1"
 CONF_KEYS = ("SENSOR_ID", "SENSOR_LAT", "SENSOR_LON")
 
 
-def identity(frame):
-    if not frame.sa:
-        return "addr:" + frame.bssid.lower(), "strong"
-    if frame.sa_random:
-        return "addr:" + frame.sa.lower(), "session"
-    return "addr:" + frame.sa.lower(), "strong"
-
-
 def to_event(frame, sensor_id, lat, lon):
-    key, tier = identity(frame)
+    key, tier = identity_key(frame)
     return {
         "schema": SCHEMA,
         "ts": frame.timestamp,
@@ -63,6 +54,9 @@ def to_event(frame, sensor_id, lat, lon):
         "da": frame.da,
         "channel": frame.channel,
         "reason": frame.reason,
+        "fingerprint": fingerprint(frame) if has_content(frame) else "",
+        "tags": ",".join(str(t) for t in frame.tags),
+        "vendor_ouis": sorted(set(frame.vendor_ouis)),
     }
 
 

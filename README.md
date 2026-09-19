@@ -459,6 +459,15 @@ python3 scripts/wifi-signature-scan.py --input logs/wifi-wlan1-<stamp>.tsv
 sudo ./scripts/wifi-live-watch.sh wlan1                   # live alerts, wifi-obs/1 + wifi-alert/1 records
 ```
 
+`wifi-fingerprint.py` identifies senders across MAC rotation by what their
+frames reveal about the hardware (tag order, rates, capabilities, vendor
+OUIs), keeps a sighting history, takes the same watchlist, and collapses
+a beacon flood's invented BSSIDs into one "same tool" identity:
+
+```bash
+./scripts/wifi-fingerprint.py --input logs/wifi-wlan1-<stamp>.tsv --watchlist config/watchlist.conf
+```
+
 Set `WIFI_IFACE` (on the uConsole + AC1200 usually `wlan1`) and the hop list
 in `config/interfaces.conf`. The wrappers put the adapter in monitor mode,
 hop channels, and restore it on exit. Records carry the same envelope as the
