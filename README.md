@@ -494,7 +494,17 @@ The collector merges devices across sensors by identity, judges every
 sensor's recent window with the same detector, estimates where a
 `strong`/`session` device or a flood is, with the error bar stated, and
 groups a run of alerts into one `fleet-incident/1` record
-(`--incidents-out`) so a SOC gets one ticket per flood. Nodes
+(`--incidents-out`) so a SOC gets one ticket per flood. To hand an
+incident to venue security or law enforcement:
+
+```bash
+./scripts/evidence-bundle.sh --incident logs/fleet-incidents.jsonl        # latest incident
+./scripts/evidence-bundle.sh --from "2026-09-19 14:00" --to "2026-09-19 14:20"
+```
+
+The bundle holds the records inside that window (plus a margin), the
+traces whose run overlapped it, a summary, and a sha256 manifest, and
+nothing about the rest of the day. Nodes
 that cannot reach a broker drop files into a directory it watches instead
 (`--watch DIR`), and finished captures can be merged after the fact
 (`--input logs/obs-*.jsonl`). The node contract, including an ESP32
