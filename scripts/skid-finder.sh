@@ -14,20 +14,32 @@ set -euo pipefail
 #
 # Non-interactive use (also what the tests exercise):
 #   scripts/skid-finder.sh --version                 the toolkit version
+#   scripts/skid-finder.sh --doctor                  what this machine can do, with fixes
 #   scripts/skid-finder.sh --list                    actions and their arguments
 #   scripts/skid-finder.sh --print <action> [args]   print the command, run nothing
 #   scripts/skid-finder.sh --run   <action> [args]   run one action and exit
 #
-# Radio actions need root. Run the menu with sudo, or run it as yourself and it
-# prefixes only those commands with sudo, which keeps logs/sightings.json and
-# the other analysis artifacts owned by you.
+# Radio actions need root, or on a laptop the unprivileged capture route
+# (lib.sh need_capture_privileges: tshark on bluetooth-monitor, open to the
+# wireshark group). Run as yourself and the menu prefixes sudo only where it
+# is still needed: BLE actions go without it when that route is available,
+# Wi-Fi monitor mode and the AIO profiles always need it. That keeps
+# logs/sightings.json and the other analysis artifacts owned by you.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# shellcheck source=lib.sh
+source "${SCRIPT_DIR}/lib.sh"
+
 SUDO=""
+BLE_SUDO=""
 if [[ "${EUID}" -ne 0 ]]; then
   SUDO="sudo"
+  BLE_SUDO="sudo"
+  if unprivileged_capture_available; then
+    BLE_SUDO=""
+  fi
 fi
 
 # Config values with the same defaults the scripts use, read without
@@ -38,8 +50,6 @@ HUNT_HCI="hci1"
 SCAN_SECONDS="30"
 WIFI_IFACE=""
 if [[ -f "${ROOT_DIR}/config/interfaces.conf" ]]; then
-  # shellcheck source=lib.sh
-  source "${SCRIPT_DIR}/lib.sh"
   load_conf_file "${ROOT_DIR}/config/interfaces.conf" CAPTURE_HCI HUNT_HCI SCAN_SECONDS WIFI_IFACE 2>/dev/null || true
 fi
 
@@ -55,6 +65,7 @@ has_script() {
 # Order here is the order on screen: the field sequence from the README's
 # checklist, then analysis, then setup.
 ACTIONS=(
+  "doctor|Check tools, groups, adapters and config for this machine|"
   "status|Show adapters and the current mode|"
   "health|Bluetooth health check report|"
   "recover|Reset a flaky adapter (before/after report)|[iface]"
@@ -82,6 +93,9 @@ build_command() {
   local cmd=()
 
   case "${action}" in
+    doctor)
+      cmd=("${SCRIPT_DIR}/skid-finder.sh" --doctor)
+      ;;
     status)
       cmd=("${SCRIPT_DIR}/detect-hci.sh" "&&" "${SCRIPT_DIR}/set-adapter-mode.sh" status)
       ;;
@@ -92,20 +106,20 @@ build_command() {
       cmd=("${SUDO}" "${SCRIPT_DIR}/recover-hci.sh" "${1:-${HUNT_HCI}}")
       ;;
     watch)
-      cmd=("${SUDO}" "${SCRIPT_DIR}/ble-spam-watch.sh" "${1:-${CAPTURE_HCI}}" "${2:-${SCAN_SECONDS}}")
+      cmd=("${BLE_SUDO}" "${SCRIPT_DIR}/ble-spam-watch.sh" "${1:-${CAPTURE_HCI}}" "${2:-${SCAN_SECONDS}}")
       ;;
     field)
-      cmd=("${SUDO}" "${SCRIPT_DIR}/ble-field-run.sh" "${1:-${CAPTURE_HCI}}" "${2:-300}")
+      cmd=("${BLE_SUDO}" "${SCRIPT_DIR}/ble-field-run.sh" "${1:-${CAPTURE_HCI}}" "${2:-300}")
       ;;
     live)
       if ! has_script ble-live-watch.sh; then
         echo "live alerting is not in this checkout (scripts/ble-live-watch.sh missing)." >&2
         return 2
       fi
-      cmd=("${SUDO}" "${SCRIPT_DIR}/ble-live-watch.sh" "${1:-${CAPTURE_HCI}}" "${2:-0}" "${3:-balanced}")
+      cmd=("${BLE_SUDO}" "${SCRIPT_DIR}/ble-live-watch.sh" "${1:-${CAPTURE_HCI}}" "${2:-0}" "${3:-balanced}")
       ;;
     capture)
-      cmd=("${SUDO}" "${SCRIPT_DIR}/capture-btmon.sh" "${1:-${CAPTURE_HCI}}" "${2:-${SCAN_SECONDS}}")
+      cmd=("${BLE_SUDO}" "${SCRIPT_DIR}/capture-btmon.sh" "${1:-${CAPTURE_HCI}}" "${2:-${SCAN_SECONDS}}")
       ;;
     wifi-capture|wifi-live)
       if ! has_script wifi-capture.sh; then
@@ -210,6 +224,93 @@ build_command() {
     fi
   done
   printf '%s\n' "${out[*]}"
+}
+
+# What this machine can and cannot do, in one screen. Every line is a
+# measurement, never a guess; the fix for each miss is printed beside it.
+doctor() {
+  local ok=0 warn=0 miss=0
+  say() { printf '  %-5s %s\n' "$1" "$2"; }
+  pass() { ok=$((ok + 1)); say "ok" "$1"; }
+  warn() { warn=$((warn + 1)); say "warn" "$1"; }
+  miss() { miss=$((miss + 1)); say "MISS" "$1"; }
+
+  echo "Skid Finder doctor  (version $(tr -d '[:space:]' < "${ROOT_DIR}/VERSION" 2>/dev/null || echo unknown))"
+  echo
+  echo "Tools"
+  local tool
+  for tool in btmon bluetoothctl btmgmt hciconfig rfkill python3 tmux whiptail; do
+    if command -v "${tool}" >/dev/null 2>&1; then pass "${tool}"; else miss "${tool} missing (bluez / python3 / rfkill / tmux / whiptail)"; fi
+  done
+  for tool in tshark editcap iw; do
+    if command -v "${tool}" >/dev/null 2>&1; then pass "${tool}"; else warn "${tool} missing: needed for Wi-Fi and for capturing without root (apt install tshark iw)"; fi
+  done
+  if python3 -c 'import paho.mqtt.client' 2>/dev/null; then pass "python3-paho-mqtt (sensor-net transport)"; else warn "python3-paho-mqtt missing: only needed for a sensor net (apt install python3-paho-mqtt)"; fi
+
+  echo
+  echo "Privileges"
+  if [[ "${EUID}" -eq 0 ]]; then
+    pass "running as root: every path available"
+  else
+    if { id -nG 2>/dev/null || true; } | tr ' ' '\n' | grep -qx wireshark; then pass "in the wireshark group"; else warn "not in the wireshark group: sudo usermod -aG wireshark \$USER, then log in again"; fi
+    if unprivileged_capture_available; then
+      pass "BLE capture and live alerting work without root (tshark bluetooth-monitor)"
+    else
+      warn "BLE capture needs sudo on this machine (tshark -D does not list bluetooth-monitor)"
+    fi
+    warn "Wi-Fi monitor mode and the AIO profiles need sudo regardless"
+  fi
+
+  echo
+  echo "Bluetooth adapters"
+  # Every probe below may fail on a machine that lacks the tool (CI has no
+  # bluez); under 'set -e' a failing command substitution would abort the
+  # report, so each one ends in '|| true' and reports what it can.
+  local adapters
+  adapters="$(hciconfig 2>/dev/null | grep -E '^hci[0-9]+:' | awk '{print $1}' | tr -d ':' | tr '\n' ' ' || true)"
+  if ! command -v hciconfig >/dev/null 2>&1; then
+    miss "hciconfig missing (bluez), cannot list adapters"
+  elif [[ -n "${adapters}" ]]; then
+    pass "found: ${adapters}"
+    local a
+    for a in ${adapters}; do
+      if hciconfig "${a}" 2>/dev/null | grep -q 'UP RUNNING'; then pass "${a} is up"; else warn "${a} is down: sudo hciconfig ${a} up, or sudo rfkill unblock bluetooth"; fi
+    done
+    if hci_exists "${CAPTURE_HCI}"; then pass "capture adapter ${CAPTURE_HCI} present"; else miss "capture adapter ${CAPTURE_HCI} (config) not present: ./scripts/detect-hci.sh"; fi
+    if hci_exists "${HUNT_HCI}"; then pass "hunt adapter ${HUNT_HCI} present"; else warn "hunt adapter ${HUNT_HCI} not present: ./scripts/set-adapter-mode.sh single (or auto)"; fi
+  else
+    miss "no Bluetooth adapter visible (hciconfig lists none): rfkill, driver, or the AIO v2 support"
+  fi
+
+  echo
+  echo "Wi-Fi"
+  if [[ -n "${WIFI_IFACE}" ]]; then
+    if command -v iw >/dev/null 2>&1 && iw dev 2>/dev/null | grep -q "Interface ${WIFI_IFACE}"; then
+      pass "WIFI_IFACE ${WIFI_IFACE} present"
+      if iw phy 2>/dev/null | grep -A12 'Supported interface modes' | grep -q monitor; then pass "a Wi-Fi phy supports monitor mode"; else warn "no Wi-Fi phy reports monitor mode; Wi-Fi capture will not work"; fi
+      if ip route show default 2>/dev/null | grep -q "dev ${WIFI_IFACE}"; then warn "${WIFI_IFACE} carries the default route: Wi-Fi capture will drop this machine's network for the run"; fi
+    else
+      miss "WIFI_IFACE ${WIFI_IFACE} not present (iw dev): pick one from 'iw dev'"
+    fi
+  else
+    warn "WIFI_IFACE not set in config/interfaces.conf: Wi-Fi detection is off (fine for BLE-only use)"
+  fi
+
+  echo
+  echo "Config"
+  local f
+  for f in interfaces.conf signatures.conf; do
+    if [[ -f "${ROOT_DIR}/config/${f}" ]]; then pass "config/${f}"; else miss "config/${f} missing: ./scripts/skid-finder.sh --run setup"; fi
+  done
+  if [[ -f "${ROOT_DIR}/config/wifi-signatures.conf" ]]; then pass "config/wifi-signatures.conf"; else warn "config/wifi-signatures.conf missing (built-in Wi-Fi thresholds apply): cp config/wifi-signatures.conf.example config/wifi-signatures.conf"; fi
+  if [[ -w "${ROOT_DIR}/logs" ]] || [[ ! -e "${ROOT_DIR}/logs" && -w "${ROOT_DIR}" ]]; then pass "logs/ is writable"; else miss "logs/ is not writable by $(id -un): chown it, or run from a copy you own"; fi
+  local rootowned
+  rootowned="$(find "${ROOT_DIR}/logs" -maxdepth 1 -user root 2>/dev/null | head -n 1 || true)"
+  if [[ -n "${rootowned}" ]]; then warn "root-owned files under logs/ (from sudo runs); analysis tools may fail to update them: sudo chown -R $(id -un) logs"; fi
+
+  echo
+  echo "Summary: ${ok} ok, ${warn} warnings, ${miss} missing"
+  (( miss == 0 ))
 }
 
 run_action() {
@@ -330,6 +431,9 @@ interactive() {
 }
 
 case "${1:-}" in
+  --doctor)
+    doctor
+    ;;
   --version)
     if [[ -r "${ROOT_DIR}/VERSION" ]]; then
       printf 'skid-finder %s\n' "$(tr -d '[:space:]' < "${ROOT_DIR}/VERSION")"

@@ -67,12 +67,45 @@ out="$("${MENU}" --print watch hci0 12)"
 [[ "${out}" == *"ble-spam-watch.sh hci0 12" ]] || fail "watch arguments not passed through: ${out}"
 
 # --- Root handling --------------------------------------------------------------
-# As a normal user the radio commands get sudo and the analysis commands do not,
-# so logs/sightings.json stays owned by the operator.
+# As a normal user, radio commands get sudo unless the unprivileged capture
+# route is available, in which case the BLE ones go without it; analysis
+# commands never get it, so logs/sightings.json stays owned by the operator.
 if [[ "${EUID}" -ne 0 ]]; then
-  [[ "$("${MENU}" --print watch)" == sudo\ * ]] || fail "radio action not prefixed with sudo for a normal user"
   [[ "$("${MENU}" --print health)" != sudo\ * ]] || fail "health check should not need sudo"
+  # Force each case with a controlled PATH: a tshark that lists the interface,
+  # and no tshark at all.
+  mkdir -p "${workdir}/ubin" "${workdir}/nobin"
+  for t in bash python3 ls head tr awk grep cat mktemp dirname sed id find tail cp sort wc; do
+    p="$(command -v "${t}" 2>/dev/null)" && ln -sf "${p}" "${workdir}/ubin/${t}" && ln -sf "${p}" "${workdir}/nobin/${t}"
+  done
+  printf '#!/usr/bin/env bash\n[[ "$1" == "-D" ]] && echo "6. bluetooth-monitor"\n' > "${workdir}/ubin/tshark"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${workdir}/ubin/editcap"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${workdir}/ubin/btmon"
+  chmod +x "${workdir}/ubin/tshark" "${workdir}/ubin/editcap" "${workdir}/ubin/btmon"
+  out="$(PATH="${workdir}/ubin" "${MENU}" --print watch)"
+  [[ "${out}" != sudo\ * ]] || fail "BLE action got sudo although the unprivileged route is available: ${out}"
+  out="$(PATH="${workdir}/nobin" "${MENU}" --print watch)"
+  [[ "${out}" == sudo\ * ]] || fail "BLE action lacks sudo when there is no unprivileged route: ${out}"
+  out="$(PATH="${workdir}/ubin" "${MENU}" --print aio restore)"
+  [[ "${out}" == sudo\ * ]] || fail "AIO profile must always get sudo: ${out}"
 fi
+
+# --- doctor --------------------------------------------------------------------------
+"${MENU}" --doctor > "${workdir}/doctor.txt" 2>&1 || true
+grep -q '^Tools' "${workdir}/doctor.txt" && grep -q '^Summary:' "${workdir}/doctor.txt" || { cat "${workdir}/doctor.txt" >&2; fail "--doctor did not produce its report"; }
+# On a machine with none of the radio tools (CI, a fresh laptop) the report
+# must still reach its summary and name what is missing, not abort halfway.
+mkdir -p "${workdir}/bare"
+for t in bash python3 tr grep awk head cat mktemp dirname sed id find tail sort wc ls cp; do
+  p="$(command -v "${t}" 2>/dev/null)" && ln -sf "${p}" "${workdir}/bare/${t}"
+done
+PATH="${workdir}/bare" "${MENU}" --doctor > "${workdir}/doctor-bare.txt" 2>&1 || true
+grep -q '^Summary:' "${workdir}/doctor-bare.txt" || { cat "${workdir}/doctor-bare.txt" >&2; fail "--doctor aborted on a machine without the radio tools"; }
+grep -qE '^  MISS +btmon' "${workdir}/doctor-bare.txt" || fail "--doctor did not report btmon missing on a bare machine"
+grep -qE 'hciconfig missing' "${workdir}/doctor-bare.txt" || fail "--doctor did not explain why adapters could not be listed"
+grep -qE '^  (ok|warn|MISS) +btmon' "${workdir}/doctor.txt" || fail "--doctor did not check btmon"
+out="$("${MENU}" --print doctor)"
+[[ "${out}" == *"skid-finder.sh --doctor" ]] || fail "doctor action malformed: ${out}"
 
 # --- Foxhunt: a MAC goes straight through; a name resolves from the latest capture
 out="$("${MENU}" --print hunt AA:BB:CC:DD:EE:FF)"

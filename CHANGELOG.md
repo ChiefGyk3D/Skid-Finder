@@ -17,6 +17,14 @@ would break.
   evidence handoff).
 - CI runs the suite on Python 3.11 (Raspberry Pi OS bookworm) and 3.13
   (Debian 13, Parrot, Ubuntu 26.04).
+- `./scripts/skid-finder.sh --doctor` (and the `doctor` menu entry): tools,
+  privileges (including whether the unprivileged BLE route works here),
+  adapters, Wi-Fi interface and monitor-mode capability, default-route
+  warning, config files, root-owned logs. Every miss carries its fix.
+
+### Changed
+- The menu prefixes `sudo` on BLE actions only when the unprivileged
+  capture route is unavailable; Wi-Fi and AIO actions always get it.
 
 ## [0.4.0-alpha.1] — 2026-09-18
 
