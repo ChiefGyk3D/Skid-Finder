@@ -136,6 +136,18 @@ Confirm the install before relying on it in the field:
 ./tests/test-toolkit.sh
 ```
 
+### First run on any machine: doctor
+
+```bash
+./scripts/skid-finder.sh --doctor
+```
+
+One screen of measurements, never guesses: which tools are present, whether
+BLE capture works without root here, which adapters exist and are up,
+whether the configured Wi-Fi interface supports monitor mode and whether it
+carries your default route, and which config files are missing. Every miss
+is printed with its fix. It is also the first entry in the menu.
+
 ### Running on a laptop without root
 
 `btmon` needs a capability only root has, but a laptop has another way in.
@@ -154,7 +166,9 @@ tshark -D | grep bluetooth-monitor   # must be listed
 Live alerting works without root too: `ble-live-watch.sh` streams the
 same advertising reports from tshark as fields, one line per report, into
 the same observer and detector, and a second tshark keeps the btsnoop
-trace. Differences from the root path: the batch captures render their text
+trace. When the unprivileged route is available the menu drops `sudo` from the
+BLE actions automatically; Wi-Fi and the AIO profiles keep it. Differences
+from the root path: the batch captures render their text
 log when the capture ends (so running counts are not shown), the monitor
 channel carries every adapter rather than one, and the content fingerprint
 of a device differs between the two paths because tshark names a vendor by
