@@ -133,6 +133,49 @@ need_root() {
   fi
 }
 
+# --- Capturing without root ------------------------------------------------------
+#
+# btmon needs CAP_NET_RAW to open the HCI monitor channel, so the capture
+# scripts historically required sudo. A laptop or desktop has another way:
+# Wireshark's dumpcap carries that capability for members of the 'wireshark'
+# group and exposes the same channel as the 'bluetooth-monitor' interface.
+# tshark can record it to pcapng, editcap can rewrite that as btsnoop, and
+# btmon can render btsnoop as the text every analysis tool here reads. None
+# of that needs root. The trade-offs: the text log only exists once the
+# capture ends (so progress counts cannot be shown live), and the monitor
+# channel carries every adapter rather than one, which on a single-adapter
+# machine changes nothing.
+#
+# The live path (ble-live-watch.sh) still needs root: it streams btmon text
+# as it happens, which the pcapng round trip cannot do.
+CAPTURE_MODE="root"
+
+unprivileged_capture_available() {
+  command -v tshark >/dev/null 2>&1 || return 1
+  command -v editcap >/dev/null 2>&1 || return 1
+  command -v btmon >/dev/null 2>&1 || return 1
+  tshark -D 2>/dev/null | grep -q 'bluetooth-monitor'
+}
+
+# Root, or the unprivileged path above. Exits with the fix otherwise.
+need_capture_privileges() {
+  if [[ "${EUID}" -eq 0 ]]; then
+    CAPTURE_MODE="root"
+    return 0
+  fi
+  if unprivileged_capture_available; then
+    CAPTURE_MODE="unprivileged"
+    echo "note: not root; capturing through tshark's bluetooth-monitor interface (wireshark group)." >&2
+    echo "note: the text log is produced when the capture ends, so live counts are not shown." >&2
+    return 0
+  fi
+  echo "Run as root (sudo)." >&2
+  echo "Or, on a laptop, capture without root: install tshark, add yourself to the" >&2
+  echo "'wireshark' group (sudo usermod -aG wireshark \$USER, then log in again) and" >&2
+  echo "confirm 'tshark -D' lists bluetooth-monitor. See TROUBLESHOOTING.md." >&2
+  exit 1
+}
+
 hci_exists() {
   local iface="$1"
   hciconfig "${iface}" >/dev/null 2>&1
@@ -356,6 +399,11 @@ run_btmon_capture() {
   local btsnoop="${5:-}"
   local rc=0
 
+  if [[ "${CAPTURE_MODE}" == "unprivileged" ]]; then
+    run_unprivileged_capture "${duration}" "${outfile}" "${mode}" "${btsnoop}"
+    return 0
+  fi
+
   local btmon_args=(-i "${iface}")
   if [[ -n "${btsnoop}" ]]; then
     btmon_args+=(-w "${btsnoop}")
@@ -378,6 +426,50 @@ run_btmon_capture() {
       ;;
   esac
 
+  return 0
+}
+
+# The unprivileged capture: tshark records the monitor channel to pcapng,
+# editcap rewrites it as btsnoop, btmon renders the text. The btsnoop is kept
+# when a path is given (it is the same artifact the root path writes), else
+# it lives only long enough to be rendered.
+run_unprivileged_capture() {
+  local duration="$1"
+  local outfile="$2"
+  local mode="${3:-quiet}"
+  local btsnoop="${4:-}"
+  local rc=0
+
+  local pcap
+  pcap="$(mktemp "${TMPDIR:-/tmp}/ble-capture-XXXXXX.pcapng")"
+  local keep_snoop="${btsnoop}"
+  if [[ -z "${keep_snoop}" ]]; then
+    keep_snoop="$(mktemp "${TMPDIR:-/tmp}/ble-capture-XXXXXX.btsnoop")"
+  fi
+
+  tshark -i bluetooth-monitor -a "duration:${duration}" -q -w "${pcap}" 2>/dev/null || rc=$?
+  case "${rc}" in
+    0|124|130|143) ;;
+    *)
+      echo "warn: tshark capture exited with status ${rc}; results may be incomplete." >&2
+      ;;
+  esac
+
+  if [[ -s "${pcap}" ]] && editcap -F btsnoop "${pcap}" "${keep_snoop}" 2>/dev/null; then
+    if [[ "${mode}" == "tee" ]]; then
+      btmon -r "${keep_snoop}" 2>/dev/null | tee "${outfile}"
+    else
+      btmon -r "${keep_snoop}" >"${outfile}" 2>/dev/null
+    fi
+  else
+    : >"${outfile}"
+    echo "warn: the unprivileged capture produced nothing to render." >&2
+  fi
+
+  rm -f "${pcap}"
+  if [[ -z "${btsnoop}" ]]; then
+    rm -f "${keep_snoop}"
+  fi
   return 0
 }
 
@@ -428,6 +520,14 @@ start_capture_progress() {
       sleep "${interval}"
       elapsed=$(( elapsed + interval ))
       (( elapsed > duration )) && elapsed="${duration}"
+
+      # Without root the text log is rendered after the capture, so there is
+      # nothing to count yet and silence is not a fault.
+      if [[ "${CAPTURE_MODE}" == "unprivileged" ]]; then
+        printf 'capturing %ss/%ss  (unprivileged: counts appear when the capture ends)\n' \
+          "${elapsed}" "${duration}"
+        continue
+      fi
 
       events=0
       addrs=0

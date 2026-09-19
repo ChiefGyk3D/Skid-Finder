@@ -33,6 +33,7 @@ python3 "${ROOT_DIR}/tests/test-detector-metrics.py" --modality wifi
 "${ROOT_DIR}/tests/test-config-parsing.sh"
 "${ROOT_DIR}/tests/test-field-menu.sh"
 "${ROOT_DIR}/tests/test-versioning.sh"
+"${ROOT_DIR}/tests/test-unprivileged-capture.sh"
 "${ROOT_DIR}/tests/test-sensor-net.sh"
 "${ROOT_DIR}/tests/test-wifi-signatures.sh"
 "${ROOT_DIR}/tests/test-wifi-live-watch.sh"

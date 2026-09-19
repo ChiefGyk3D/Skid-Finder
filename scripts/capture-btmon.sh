@@ -8,7 +8,7 @@ source "${SCRIPT_DIR}/lib.sh"
 load_config
 need_cmd btmon
 need_cmd hciconfig
-need_root
+need_capture_privileges
 
 IFACE="${1:-}"
 DURATION="${2:-${SCAN_SECONDS}}"

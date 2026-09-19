@@ -10,7 +10,7 @@ need_cmd btmon
 need_cmd hciconfig
 need_cmd timeout
 need_cmd tee
-need_root
+need_capture_privileges
 
 IFACE="${1:-}"
 DURATION="${2:-${SCAN_SECONDS}}"

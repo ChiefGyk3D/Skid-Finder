@@ -35,7 +35,12 @@ need_cmd btmon
 need_cmd python3
 need_cmd stdbuf
 need_cmd tee
-need_root
+if [[ "${EUID}" -ne 0 ]]; then
+  echo "Run as root (sudo). Live alerting streams btmon as it happens, which the" >&2
+  echo "unprivileged pcapng path cannot do; capture-btmon.sh and ble-field-run.sh" >&2
+  echo "work without root on a laptop in the wireshark group." >&2
+  exit 1
+fi
 
 IFACE="${1:-}"
 DURATION="${2:-0}"

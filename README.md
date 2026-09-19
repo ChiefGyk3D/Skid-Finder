@@ -136,6 +136,29 @@ Confirm the install before relying on it in the field:
 ./tests/test-toolkit.sh
 ```
 
+### Running on a laptop without root
+
+`btmon` needs a capability only root has, but a laptop has another way in.
+Members of the `wireshark` group can record the same HCI monitor channel
+through tshark's `bluetooth-monitor` interface; the toolkit rewrites that
+as btsnoop and renders it with `btmon -r`, so the capture, field run and
+spam sweep work without `sudo`:
+
+```bash
+sudo usermod -aG wireshark "$USER"   # once, then log in again
+tshark -D | grep bluetooth-monitor   # must be listed
+./scripts/capture-btmon.sh hci0 30    # no sudo
+./scripts/ble-field-run.sh hci0 60
+```
+
+Two differences from the root path: the text log is produced when the
+capture ends, so the running counts are not shown, and the monitor channel
+carries every adapter rather than one. Live alerting (`ble-live-watch.sh`)
+and Wi-Fi monitor mode still need root. Measured on a Parrot 7.3 laptop
+on 2026-09-18: a 30 s unprivileged capture rendered 74 advertising reports
+and matched no signature on any profile, and is recorded as a real ambient
+baseline in the corpus.
+
 ## Configure Interfaces
 
 ```bash

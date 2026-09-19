@@ -118,6 +118,7 @@ except OSError as exc:
   check_file "tests/test-config-parsing.sh"
   check_file "tests/test-field-menu.sh"
   check_file "tests/test-versioning.sh"
+  check_file "tests/test-unprivileged-capture.sh"
   check_file "tests/test-sensor-net.sh"
   check_file "tests/make-fleet-fixture.py"
   check_file "tests/test-wifi-signatures.sh"
