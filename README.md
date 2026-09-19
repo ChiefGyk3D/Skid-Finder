@@ -19,6 +19,29 @@ Out-of-box defaults are single-adapter safe:
 - scripts auto-fallback to `hci0` if `hci1` is missing or unstable
 - one-command mode switch is available for `dual`, `single`, and `auto`
 
+## Quick start on a laptop or desktop
+
+Any Linux machine with a BlueZ-visible Bluetooth adapter can run the BLE
+side, and no root is needed if you are in the `wireshark` group. Five
+minutes from clone to a verdict:
+
+```bash
+git clone https://github.com/ChiefGyk3D/Skid-Finder.git && cd Skid-Finder
+sudo ./scripts/setup-linux.sh            # bluez, python3, tshark, iw, whiptail...
+sudo usermod -aG wireshark "$USER"       # once; log out and in again
+./scripts/skid-finder.sh --doctor        # what this machine can do, with fixes
+./scripts/skid-finder.sh --run setup     # config files from the examples
+./scripts/ble-field-run.sh hci0 60       # capture, summary, signature scan
+./scripts/ble-live-watch.sh hci0         # live alerts until Ctrl+C
+./scripts/skid-finder.sh                 # or the menu
+```
+
+Nothing should match on ordinary traffic. If something does, record the
+capture as your baseline (`scripts/add-corpus-sample.sh --label ambient`)
+and raise the threshold it tripped; the README section on baselining says
+how. Wi-Fi detection needs a monitor-capable adapter and root:
+[docs/wifi-notes.md](docs/wifi-notes.md).
+
 ## Legal and Safety
 
 **Operator Qualifications & Compliance:**
