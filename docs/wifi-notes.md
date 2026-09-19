@@ -21,8 +21,7 @@ been run on the AC1200 from this project. Treat every match as a lead.
 
 Coverage is deliberately the common scripted attacks. Not covered yet: WPA
 handshake capture attempts (passive and indistinguishable from a client
-joining), PMKID probing, rogue DHCP/DNS on the wire, and probe-request
-fingerprinting of randomised clients.
+joining), PMKID probing, and rogue DHCP/DNS on the wire.
 
 ## Capture
 
@@ -56,10 +55,26 @@ probe_resp, deauth, disassoc, ...), `subtype`, `bssid`, `da`, `channel` and
 `reason`. `name` carries the SSID. `ts` is absolute because tshark's
 `frame.time_epoch` is.
 
-Identity is stated plainly: a globally administered MAC is tier `strong`
-and keyed `addr:<mac>`; a locally administered one is a randomised client
-address, tier `session`, stable for one session with one network and
-rotated afterwards. Nothing links a randomised address across rotations.
+Identity comes from `wifi_identity.py` and is stated plainly. A globally
+administered MAC (an access point's BSSID, an older client) is tier
+`strong`, keyed `addr:<mac>`. A randomised MAC on a probe request or a
+beacon is keyed by its **content fingerprint**, `fp:wifi:<hash>`, at tier
+`model`: the order of the frame's tagged parameters, its supported rates,
+its HT capability word and the vendor OUIs it names, which come from the
+driver and firmware rather than from the user. A phone that rotates its
+probe MAC every burst stays one identity; every phone of that model in the
+room shares it, and the tier says so. A randomised MAC on any other frame
+is tier `session`. Records carry `fingerprint`, `tags` and `vendor_ouis`
+so a collector or a SIEM can group on them too.
+
+`scripts/wifi-fingerprint.py` is the BLE fingerprint tool's counterpart:
+a report by identity and tier, a sighting store (`logs/wifi-sightings.json`)
+that stars senders seen in an earlier capture, the same watchlist file
+(addresses, `name:<ssid>` for what a client probes for, or a fingerprint),
+and `--hunt` to list every rotated address behind one identity. A beacon
+flood's invented BSSIDs, hundreds of "access points" seen once each with
+one content fingerprint, are collapsed into one model-tier identity
+labelled as a flood, which is how the report says "the same tool, again".
 
 `wifi-alert/1` mirrors `ble-alert/1`. The collector keeps a separate Wi-Fi
 window per sensor and judges it with the Wi-Fi detector; a flood seen by
@@ -73,6 +88,11 @@ several positioned sensors is placed the same way a BLE flood is.
   version the uConsole ships.
 - `wlan.fc.type_subtype` prints as hex in some versions and decimal in
   others; both are handled.
+- The four fingerprint fields (`wlan.tag.number`, `wlan.supported_rates`,
+  `wlan.ht.capabilities`, `wlan.tag.oui`) come out of the uConsole's tshark
+  in the spellings the parser accepts, and real probe requests from one
+  phone across MAC rotations do share a fingerprint. Synthetic traffic
+  says yes; a real capture is the check.
 - Monitor mode on the MT7921 under the AIO v2 kernel, and whether
   NetworkManager or `wpa_supplicant` fights the interface. The wrapper
   handles NetworkManager; anything else is a troubleshooting entry to write.

@@ -165,6 +165,8 @@ if [[ -x "${ROOT_DIR}/scripts/wifi-capture.sh" ]]; then
   : > "${workdir}/root/logs/wifi-wlan7-20260918-120000.tsv"
   out="$("${MENU}" --print wifi-scan)"
   [[ "${out}" == *"wifi-signature-scan.py --input "*"wifi-wlan7-20260918-120000.tsv" ]] || fail "wifi-scan malformed: ${out}"
+  out="$("${MENU}" --print wifi-fingerprint)"
+  [[ "${out}" == *"wifi-fingerprint.py --input "*"wifi-wlan7-20260918-120000.tsv" ]] || fail "wifi-fingerprint malformed: ${out}"
 fi
 
 # --- The live action appears only when the script exists ----------------------

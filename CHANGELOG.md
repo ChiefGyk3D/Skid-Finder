@@ -10,6 +10,18 @@ would break.
 ## [Unreleased]
 
 ### Added
+- Wi-Fi fingerprinting: `scripts/wifi_identity.py` keys a probe request
+  or beacon from a randomised MAC by its content (tag order, supported
+  rates, HT capability word, vendor OUIs) at tier `model`, so a phone that
+  rotates its probe MAC every burst stays one identity and a beacon
+  flood's invented BSSIDs collapse to one "same tool" fingerprint.
+  `scripts/wifi-fingerprint.py` mirrors the BLE tool: report by identity
+  and tier, sighting store (`logs/wifi-sightings.json`), the same
+  watchlist matchers, `--hunt`. The capture asks tshark for four more
+  fields and every occurrence (`-E occurrence=a`); `wifi-obs/1` records
+  carry `fingerprint`, `tags` and `vendor_ouis`. Menu entry
+  `wifi-fingerprint`. `tests/test-wifi-fingerprint.sh`. Synthetic traffic
+  only; a real capture across a phone's MAC rotations is the check.
 - Foxhunt handoff: `fleet-incident/1` records carry `targets` (the
   addresses each involved identity used during the incident, reliable
   tiers first, capped), and `foxhunt-rssi.sh --from-incident FILE [--id]`

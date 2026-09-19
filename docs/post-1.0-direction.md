@@ -33,28 +33,24 @@ The Wi-Fi side detects four attack families. The BLE side also
 fingerprints, keeps a sighting history, watches a list, and foxhunts by
 name. Bring Wi-Fi to the same place.
 
-**Fingerprinting randomised clients.** Modern clients randomise the MAC
-per network and often per probe burst, so an address is a `session`
-identity at best. What persists is the probe request's content: the
-ordered list of SSIDs a device asks for, the order and values of its
-tagged parameters (supported rates, HT/VHT/HE capabilities, vendor
-specific elements), and its timing. A `wifi_identity.py` mirrors
-`ble_identity.py`: a content fingerprint over those fields, tier `model`
-by default, promoted to `session` when the same fingerprint holds one
-address for the run. The honesty note is the same as BLE's: a fingerprint
-identifies a product and a configuration, and two people with the same
-phone and the same saved networks collapse together.
+**Fingerprinting randomised clients.** *Exists now*: `wifi_identity.py`
+keys a probe request or beacon from a randomised MAC by its content
+(tag order, supported rates, HT capability word, vendor OUIs) at tier
+`model`, and `wifi-fingerprint.py` reports, stores and watches on it.
+Measured on synthetic traffic only; the first real capture across a
+phone's MAC rotations is the check. Still to add: the probed-SSID list
+and VHT/HE capability words as further fingerprint inputs, and promotion
+to `session` when one fingerprint holds one address for a run.
 
-**Attack-source fingerprinting.** A deauth flood, a beacon spammer or a
-KARMA responder has a signature of its own: sequence-number stride, the
-exact reason code, the beacon interval, the capability bits it claims,
-whether its BSSIDs share a prefix. Recording those per alert lets the
-collector say "the same tool, again" across an event, which is the
-"who is doing it" a venue actually needs.
+**Attack-source fingerprinting.** *Half exists now*: a beacon flood's
+invented BSSIDs collapse to one content fingerprint in the fingerprint
+report ("the same tool, again"). Still to add for the other families:
+sequence-number stride, the exact reason code, the beacon interval and
+the capability bits, recorded per alert so the collector can say it too.
 
-**Sighting history and watchlist.** `wifi-fingerprint.py` with the same
-`logs/sightings.json` store and `config/watchlist.conf` matchers as BLE,
-so a device flagged on Friday is marked `*` when it reappears on Saturday.
+**Sighting history and watchlist.** *Exists now*: `wifi-fingerprint.py`
+with `logs/wifi-sightings.json` and the same `config/watchlist.conf`
+matchers as BLE, so a device flagged on Friday is marked `*` on Saturday.
 
 **Foxhunt.** `foxhunt-rssi.sh` gains a Wi-Fi mode: track one or more MACs
 (resolved from a fingerprint the same way BLE does it) by median RSSI from

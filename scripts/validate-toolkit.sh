@@ -127,6 +127,7 @@ except OSError as exc:
   check_file "tests/test-sensor-net.sh"
   check_file "tests/make-fleet-fixture.py"
   check_file "tests/test-wifi-signatures.sh"
+  check_file "tests/test-wifi-fingerprint.sh"
   check_file "tests/test-wifi-live-watch.sh"
   check_file "tests/make-wifi-fixture.py"
   check_file "tests/corpus/wifi-manifest.jsonl"
@@ -157,6 +158,8 @@ except OSError as exc:
     scripts/wifi_parse.py \
     scripts/wifi_signatures.py \
     scripts/wifi-observe.py \
+    scripts/wifi_identity.py \
+    scripts/wifi-fingerprint.py \
     scripts/wifi-signature-scan.py \
     scripts/wifi-live-alert.py \
     scripts/wifi-capture.sh \

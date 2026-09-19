@@ -40,8 +40,23 @@ def rand_mac(rng, local=True):
     return f"{first:02X}:" + ":".join(f"{rng.randint(0, 255):02X}" for _ in range(5))
 
 
-def line(ts, subtype, sa, da, bssid, ssid, rssi, channel, reason=""):
-    return "\t".join([f"{ts:.6f}", f"0x{subtype:04x}", sa, da, bssid, ssid, str(rssi), str(channel), str(reason)])
+# What a sender reveals about its hardware regardless of its MAC. Each
+# "model" has a fixed tag order, rate set, HT word and vendor OUIs; a real
+# capture shows the same. Clients rotate their MAC per probe burst, so only
+# these columns tie a burst to a product.
+MODELS = {
+    "phone-a": ("0,1,3,50,45,127,221,221", "0x82,0x84,0x8b,0x96,0x0c,0x12,0x18,0x24", "0x19ef", "0050f2,001018"),
+    "phone-b": ("0,1,45,50,127,221", "0x02,0x04,0x0b,0x16,0x0c,0x12,0x18,0x24", "0x01ef", "0050f2"),
+    "laptop":  ("0,1,3,45,127,191,221", "0x82,0x84,0x8b,0x96,0x24,0x30,0x48,0x6c", "0x1ffe", "0050f2,506f9a"),
+    "ap":      ("0,1,3,5,42,48,45,61,127,221", "0x82,0x84,0x8b,0x96,0x0c,0x12,0x18,0x24", "0x0dbf", "0050f2"),
+    "spammer": ("0,1,3,221", "0x82,0x84,0x8b,0x96", "", "00037f"),
+}
+
+
+def line(ts, subtype, sa, da, bssid, ssid, rssi, channel, reason="", model=""):
+    tags, rates, ht, ouis = MODELS.get(model, ("", "", "", ""))
+    return "\t".join([f"{ts:.6f}", f"0x{subtype:04x}", sa, da, bssid, ssid, str(rssi), str(channel), str(reason),
+                       tags, rates, ht, ouis])
 
 
 def ambient(rng, duration, out):
@@ -50,26 +65,33 @@ def ambient(rng, duration, out):
         oui = OUIS[i % 3]  # the venue runs one vendor
         aps.append({"bssid": mac(rng, oui), "ssid": SSIDS_VENUE[i % len(SSIDS_VENUE)],
                     "ch": rng.choice([1, 6, 11, 36, 44]), "rssi": rng.randint(-75, -40)})
-    clients = [rand_mac(rng) for _ in range(20)]
+    # Twenty clients of three models; each rotates its probe MAC every burst.
+    clients = [{"model": ["phone-a", "phone-b", "laptop"][i % 3], "mac": rand_mac(rng), "left": 0}
+               for i in range(20)]
     t = 0.0
     while t < duration:
         for ap in aps:
             out.append(line(BASE + t + rng.random() * 0.05, 8, ap["bssid"], "FF:FF:FF:FF:FF:FF",
-                            ap["bssid"], ap["ssid"], ap["rssi"] + rng.randint(-4, 4), ap["ch"]))
+                            ap["bssid"], ap["ssid"], ap["rssi"] + rng.randint(-4, 4), ap["ch"], model="ap"))
         if rng.random() < 0.6:
             c = rng.choice(clients)
+            if c["left"] <= 0:
+                c["mac"] = rand_mac(rng)
+                c["left"] = rng.randint(2, 6)
+            c["left"] -= 1
             ssid = rng.choice(SSIDS_PROBED)
-            out.append(line(BASE + t + 0.02, 4, c, "FF:FF:FF:FF:FF:FF", "FF:FF:FF:FF:FF:FF", ssid,
-                            rng.randint(-80, -50), 6))
+            out.append(line(BASE + t + 0.02, 4, c["mac"], "FF:FF:FF:FF:FF:FF", "FF:FF:FF:FF:FF:FF", ssid,
+                            rng.randint(-80, -50), 6, model=c["model"]))
             if ssid in SSIDS_VENUE:
                 ap = next(a for a in aps if a["ssid"] == ssid)
-                out.append(line(BASE + t + 0.03, 5, ap["bssid"], c, ap["bssid"], ssid, ap["rssi"], ap["ch"]))
+                out.append(line(BASE + t + 0.03, 5, ap["bssid"], c["mac"], ap["bssid"], ssid, ap["rssi"], ap["ch"],
+                                model="ap"))
         if rng.random() < 0.01:
             ap = rng.choice(aps)
-            out.append(line(BASE + t + 0.04, 12, ap["bssid"], rng.choice(clients), ap["bssid"], "",
+            out.append(line(BASE + t + 0.04, 12, ap["bssid"], rng.choice(clients)["mac"], ap["bssid"], "",
                             ap["rssi"], ap["ch"], 4))
         t += 0.1
-    return aps, clients
+    return aps, [c["mac"] for c in clients]
 
 
 def deauth(rng, duration, out, aps, clients, rate=25.0):
@@ -89,7 +111,8 @@ def beacon(rng, duration, out, rate=30.0):
     for i in range(n):
         b = rand_mac(rng, local=False)
         out.append(line(BASE + 5 + i * ((duration - 10) / n), 8, b, "FF:FF:FF:FF:FF:FF", b,
-                        f"FreeWiFi-{rng.randint(1000, 9999)}", rng.randint(-70, -40), rng.choice([1, 6, 11])))
+                        f"FreeWiFi-{rng.randint(1000, 9999)}", rng.randint(-70, -40), rng.choice([1, 6, 11]),
+                        model="spammer"))
 
 
 def evil_twin(rng, duration, out, aps):
