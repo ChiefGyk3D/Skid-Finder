@@ -462,6 +462,15 @@ that cannot reach a broker drop files into a directory it watches instead
 (`--input logs/obs-*.jsonl`). The node contract, including an ESP32
 reference sketch, is in [docs/sensor-nodes.md](docs/sensor-nodes.md).
 
+### 3f) Fixed sensor or collector as a service
+
+`systemd/` carries units for a box that runs unattended: a per-adapter
+sensor (`skid-finder-sensor@hci0`), the collector, and a nightly retention
+sweep that removes observations, captures and traces older than three
+days while keeping alerts, incidents and state. Install and drop-in
+examples, including running the sensor without root, are in
+[docs/fixed-sensor.md](docs/fixed-sensor.md).
+
 ### 4) Dual-pane session
 
 ```bash
