@@ -166,7 +166,6 @@ need_capture_privileges() {
   if unprivileged_capture_available; then
     CAPTURE_MODE="unprivileged"
     echo "note: not root; capturing through tshark's bluetooth-monitor interface (wireshark group)." >&2
-    echo "note: the text log is produced when the capture ends, so live counts are not shown." >&2
     return 0
   fi
   echo "Run as root (sudo)." >&2
@@ -440,6 +439,7 @@ run_unprivileged_capture() {
   local btsnoop="${4:-}"
   local rc=0
 
+  echo "note: the text log is rendered when the capture ends, so running counts are not shown." >&2
   local pcap
   pcap="$(mktemp "${TMPDIR:-/tmp}/ble-capture-XXXXXX.pcapng")"
   local keep_snoop="${btsnoop}"
@@ -586,6 +586,55 @@ stop_capture_progress() {
 #
 # Usage: run_live_pipeline <iface> <duration> <trace|""> <obs_out> \
 #            [observe args...] -- [alert args...]
+# tshark field list for the unprivileged live path. Keep in step with
+# scripts/ble_parse.py TSHARK_FIELDS and TSHARK_FILTER.
+BLE_TSHARK_FIELDS=(
+  -e frame.time_epoch
+  -e bthci_evt.le_meta_subevent
+  -e bthci_evt.bd_addr
+  -e bthci_evt.le_peer_address_type
+  -e bthci_evt.rssi
+  -e btcommon.eir_ad.entry.device_name
+  -e btcommon.eir_ad.entry.company_id
+  -e btcommon.eir_ad.entry.uuid_16
+  -e btcommon.eir_ad.entry.type
+  -e bthci_evt.le_ext_advts_event_type
+  -e bthci_evt.le_advts_event_type
+  -e bthci_evt.data_length
+)
+BLE_TSHARK_FILTER="bthci_evt.le_meta_subevent == 0x02 || bthci_evt.le_meta_subevent == 0x0d"
+
+# Trace writer for the unprivileged live path: a second tshark on the same
+# monitor channel writing pcapng, converted to btsnoop when stopped.
+UNPRIV_TRACE_PID=""
+UNPRIV_TRACE_PCAP=""
+
+start_unprivileged_trace() {
+  local btsnoop="$1"
+  UNPRIV_TRACE_PCAP="${btsnoop%.btsnoop}.pcapng"
+  tshark -i bluetooth-monitor -q -w "${UNPRIV_TRACE_PCAP}" >/dev/null 2>&1 &
+  UNPRIV_TRACE_PID=$!
+}
+
+stop_unprivileged_trace() {
+  local btsnoop="$1"
+  if [[ -n "${UNPRIV_TRACE_PID}" ]]; then
+    # TERM, not INT: a job started in the background from a non-interactive
+    # shell has INT ignored, and tshark finalises the file on TERM as well.
+    kill "${UNPRIV_TRACE_PID}" 2>/dev/null || true
+    wait "${UNPRIV_TRACE_PID}" 2>/dev/null || true
+    UNPRIV_TRACE_PID=""
+  fi
+  if [[ -n "${UNPRIV_TRACE_PCAP}" && -s "${UNPRIV_TRACE_PCAP}" ]]; then
+    if editcap -F btsnoop "${UNPRIV_TRACE_PCAP}" "${btsnoop}" 2>/dev/null; then
+      rm -f "${UNPRIV_TRACE_PCAP}"
+    else
+      echo "note: trace kept as pcapng at ${UNPRIV_TRACE_PCAP} (editcap could not convert it)." >&2
+    fi
+  fi
+  UNPRIV_TRACE_PCAP=""
+}
+
 run_live_pipeline() {
   local iface="$1"
   local duration="$2"
@@ -614,14 +663,25 @@ run_live_pipeline() {
   if (( duration > 0 )); then
     cmd+=(timeout "${duration}")
   fi
-  cmd+=(stdbuf -oL btmon -i "${iface}")
-  if [[ -n "${trace}" ]]; then
-    cmd+=(-w "${trace}")
+  local format="btmon"
+  if [[ "${CAPTURE_MODE}" == "unprivileged" ]]; then
+    # Without root, tshark streams the same advertising reports as fields,
+    # one line per report (-l flushes per packet). A live tshark refuses a
+    # display filter together with -w, so the trace is not written here;
+    # the caller runs a second tshark for it (start_unprivileged_trace).
+    format="tshark"
+    cmd+=(tshark -i bluetooth-monitor -l -Y "${BLE_TSHARK_FILTER}" -T fields "${BLE_TSHARK_FIELDS[@]}"
+          -E separator=/t -E occurrence=a -E 'aggregator=,')
+  else
+    cmd+=(stdbuf -oL btmon -i "${iface}")
+    if [[ -n "${trace}" ]]; then
+      cmd+=(-w "${trace}")
+    fi
   fi
 
   local rc=0
   "${cmd[@]}" 2>/dev/null \
-    | python3 "${ROOT_DIR}/scripts/ble-observe.py" --stream "${observe_args[@]}" \
+    | python3 "${ROOT_DIR}/scripts/ble-observe.py" --stream --format "${format}" "${observe_args[@]}" \
     | tee "${obs_out}" \
     | python3 "${ROOT_DIR}/scripts/ble-live-alert.py" "${alert_args[@]}" || rc=$?
 

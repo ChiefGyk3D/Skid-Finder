@@ -50,12 +50,12 @@ SCHEMA = "ble-obs/1"
 CONF_KEYS = ("SENSOR_ID", "SENSOR_LAT", "SENSOR_LON")
 
 
-def to_event(record, sensor_id, lat, lon, epoch_base):
+def to_event(record, sensor_id, lat, lon, epoch_base, absolute=False):
     key, tier = identity_key(record)
 
     ts = record.timestamp
-    ts_absolute = False
-    if ts is not None and epoch_base is not None:
+    ts_absolute = bool(absolute and ts is not None)
+    if ts is not None and epoch_base is not None and not absolute:
         # btmon timestamps are offsets from its first packet. Adding a known
         # base (the capture's wall-clock start) turns them into absolute epoch
         # time, which is what a multi-sensor collector needs to line events up.
@@ -95,7 +95,10 @@ def emit(records, handle, args):
             # seconds it took to bring the scan up.
             args.epoch_base = time.time() - record.timestamp
         base = args.epoch_base if isinstance(args.epoch_base, float) else None
-        event = to_event(record, args.sensor_id, args.lat, args.lon, base)
+        # tshark stamps every line with frame.time_epoch, already absolute;
+        # an --epoch-base would double-count and is ignored for that format.
+        event = to_event(record, args.sensor_id, args.lat, args.lon, base,
+                         absolute=(args.format == "tshark"))
         handle.write(json.dumps(event, sort_keys=True) + "\n")
         # Flush per line in stream mode so a downstream consumer (or a person
         # watching) sees observations as they happen, not in block-buffered
@@ -136,6 +139,9 @@ def main() -> int:
                      help="read btmon text from stdin and emit live")
     parser.add_argument("--out", default="-",
                         help="output JSONL path, or '-' for stdout (default)")
+    parser.add_argument("--format", default="btmon", choices=["btmon", "tshark"],
+                        help="input format: btmon text (default) or tshark field lines "
+                             "(the unprivileged live path; see ble_parse.TSHARK_FIELDS)")
     parser.add_argument("--sensor-id", default=setting("SENSOR_ID", conf, "unknown"),
                         help="identifier for this sensor (default: $SENSOR_ID, then "
                              "SENSOR_ID in config/interfaces.conf, then 'unknown')")
@@ -154,11 +160,17 @@ def main() -> int:
     args.epoch_base = parse_epoch_base(args.epoch_base)
 
     if args.stream:
-        records = ble_parse.iter_records(sys.stdin)
+        if args.format == "tshark":
+            records = ble_parse.iter_tshark_records(sys.stdin)
+        else:
+            records = ble_parse.iter_records(sys.stdin)
     else:
         if not os.path.exists(args.input):
             sys.exit(f"ERROR: input file not found: {args.input}")
-        records = ble_parse.parse_records(args.input)
+        if args.format == "tshark":
+            records = ble_parse.parse_tshark_records(args.input)
+        else:
+            records = ble_parse.parse_records(args.input)
 
     try:
         if args.out == "-":

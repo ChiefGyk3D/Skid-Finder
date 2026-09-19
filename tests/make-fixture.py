@@ -16,9 +16,16 @@ def rand_mac(rng: random.Random) -> str:
     return ":".join(f"{rng.randint(0, 255):02X}" for _ in range(6))
 
 
+FORMAT = "btmon"
+
+
 def emit(handle, timestamp: float, addr: str, addr_type: str, rssi: int,
          name: str = "", company: str = "", company_id: int = 0,
          service_uuid: str = "", addr_class: str = "Resolvable") -> None:
+    if FORMAT == "tshark":
+        emit_tshark(handle, timestamp, addr, addr_type, rssi, name, company_id,
+                    service_uuid, addr_class)
+        return
     handle.write(f"> HCI Event: LE Meta Event (0x3e) plen 43 {' ' * 20}#1 {timestamp:.6f}\n")
     handle.write("      LE Extended Advertising Report (0x0d)\n")
     handle.write("        Num reports: 1\n")
@@ -38,6 +45,39 @@ def emit(handle, timestamp: float, addr: str, addr_type: str, rssi: int,
         handle.write(f"          Company: {company} ({company_id})\n")
     if service_uuid:
         handle.write(f"          Service Data: {service_uuid}\n")
+
+
+def emit_tshark(handle, timestamp, addr, addr_type, rssi, name, company_id,
+                service_uuid, addr_class) -> None:
+    """The same advertisement as tshark -T fields prints it (ble_parse.TSHARK_FIELDS).
+
+    The address class lives in the address bits on this path, so the top
+    two bits of the first byte are rewritten to match addr_class.
+    """
+    first = int(addr[0:2], 16) & 0x3F
+    if addr_type.lower() == "public" or addr_class.startswith("OUI") or addr_class not in (
+            "Resolvable", "Non-Resolvable", "Static"):
+        peer_type = "0x00"
+        if addr_type.lower() != "public":
+            peer_type = "0x00"
+    else:
+        peer_type = "0x01"
+        first |= {"Static": 0xC0, "Resolvable": 0x40, "Non-Resolvable": 0x00}[addr_class]
+    addr = f"{first:02x}" + addr[2:].lower()
+    uuid = ""
+    types = ["0x01"]
+    if service_uuid:
+        uuid = "0xfe2c" if "fe2c" in service_uuid.lower() else "0x180f"
+        types.append("0x16")
+    if company_id:
+        types.append("0xff")
+    if name:
+        types.append("0x09")
+    handle.write("\t".join([
+        f"{1758400000 + timestamp:.6f}", "0x0d", addr, peer_type, str(rssi), name,
+        f"0x{company_id:04x}" if company_id else "", uuid, ",".join(types),
+        "0x0013", "", "24",
+    ]) + "\n")
 
 
 def gen_ambient(handle, duration: float, rng: random.Random,
@@ -130,8 +170,12 @@ def main() -> int:
                         help="advertisements per second (default: mode-specific)")
     parser.add_argument("--seed", type=int, default=1337)
     parser.add_argument("--output", default="-")
+    parser.add_argument("--format", default="btmon", choices=["btmon", "tshark"],
+                        help="btmon text (default) or tshark field lines")
     args = parser.parse_args()
 
+    global FORMAT
+    FORMAT = args.format
     rng = random.Random(args.seed)
     handle = sys.stdout if args.output == "-" else open(args.output, "w", encoding="utf-8")
     generator = {"ambient": gen_ambient, "spam": gen_spam,

@@ -32,6 +32,14 @@
 {"kind":"synthetic","label":"spam","mode":"fastpair","duration":30,"rate":15,"seed":1,"families":["fastpair"]}
 {"kind":"synthetic","label":"spam","mode":"fastpair","duration":30,"rate":25,"seed":2,"families":["fastpair"]}
 {"kind":"synthetic","label":"spam","mode":"fastpair","duration":60,"rate":25,"seed":3,"families":["fastpair"]}
+# --- the same traffic in tshark's field spelling ------------------------------
+# The unprivileged live path (tshark on bluetooth-monitor) feeds the detector
+# through a second parser. The verdict must not depend on which parser saw
+# the traffic; these samples hold that.
+{"kind":"synthetic","label":"ambient","mode":"ambient","duration":30,"rate":30,"seed":1,"format":"tshark"}
+{"kind":"synthetic","label":"ambient","mode":"ambient","duration":60,"rate":45,"seed":5,"format":"tshark"}
+{"kind":"synthetic","label":"spam","mode":"spam","duration":30,"rate":45,"seed":2,"format":"tshark","families":["flipper","random_churn","generic"]}
+{"kind":"synthetic","label":"spam","mode":"fastpair","duration":30,"rate":25,"seed":2,"format":"tshark","families":["fastpair"]}
 # --- real captures: operator-provided field baselines ------------------------
 # Uncomment and point at files you drop under tests/corpus/real/ after taking
 # your own quiet-ambient baseline. Absent files are skipped, not failed, so CI

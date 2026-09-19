@@ -151,13 +151,22 @@ tshark -D | grep bluetooth-monitor   # must be listed
 ./scripts/ble-field-run.sh hci0 60
 ```
 
-Two differences from the root path: the text log is produced when the
-capture ends, so the running counts are not shown, and the monitor channel
-carries every adapter rather than one. Live alerting (`ble-live-watch.sh`)
-and Wi-Fi monitor mode still need root. Measured on a Parrot 7.3 laptop
-on 2026-09-18: a 30 s unprivileged capture rendered 74 advertising reports
-and matched no signature on any profile, and is recorded as a real ambient
-baseline in the corpus.
+Live alerting works without root too: `ble-live-watch.sh` streams the
+same advertising reports from tshark as fields, one line per report, into
+the same observer and detector, and a second tshark keeps the btsnoop
+trace. Differences from the root path: the batch captures render their text
+log when the capture ends (so running counts are not shown), the monitor
+channel carries every adapter rather than one, and the content fingerprint
+of a device differs between the two paths because tshark names a vendor by
+id (`0x004c`) where btmon names it (`apple, inc.`). Wi-Fi monitor mode
+still needs root.
+
+Measured on a Parrot 7.3 laptop on 2026-09-18: a 30 s unprivileged capture
+rendered 74 advertising reports and matched no signature on any profile
+(recorded as a real ambient baseline in the corpus), and a 25 s
+unprivileged live watch produced 67 observations with absolute timestamps,
+a converted btsnoop trace and alert records. The corpus gate also holds
+the same verdict on the same synthetic traffic in both spellings.
 
 ## Configure Interfaces
 

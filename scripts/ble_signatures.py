@@ -264,9 +264,12 @@ def build_stats(records, duration: float = 0.0) -> Stats:
     return stats
 
 
-def parse_log(path: str) -> Stats:
+def parse_log(path: str, fmt: str = "btmon") -> Stats:
     try:
-        records = ble_parse.parse_records(path)
+        if fmt == "tshark":
+            records = ble_parse.parse_tshark_records(path)
+        else:
+            records = ble_parse.parse_records(path)
     except FileNotFoundError:
         print(f"ERROR: input file not found: {path}", file=sys.stderr)
         sys.exit(2)

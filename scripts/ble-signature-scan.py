@@ -84,10 +84,12 @@ def main() -> int:
         help="Optional signatures config file path",
     )
     parser.add_argument("--quiet", action="store_true", help="Only print match lines")
+    parser.add_argument("--format", default="btmon", choices=["btmon", "tshark"],
+                        help="btmon text (default) or tshark field lines")
     args = parser.parse_args()
 
     cfg = load_config(args.profile, args.config)
-    stats = parse_log(args.input)
+    stats = parse_log(args.input, args.format)
     matches = evaluate(stats, cfg)
     print_summary(stats, matches, args.quiet, cfg)
     return 0

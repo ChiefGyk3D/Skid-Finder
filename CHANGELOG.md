@@ -9,14 +9,30 @@ would break.
 
 ## [Unreleased]
 
+## [0.4.0-alpha.1] — 2026-09-18
+
+**Alpha.** The laptop paths below were exercised on real hardware (a
+Parrot 7.3 laptop's internal adapter); the uConsole checklist is
+unchanged.
+
 ### Added
+- Live alerting without root: `ble-live-watch.sh` streams LE advertising
+  reports from tshark's `bluetooth-monitor` interface as fields
+  (`ble_parse.TSHARK_FIELDS`, a second parser feeding the same detector),
+  with a separate tshark keeping the btsnoop trace. `ble-observe.py` and
+  `ble-signature-scan.py` take `--format tshark`; `make-fixture.py` emits
+  that spelling, and the corpus gate now holds the same verdict on the
+  same traffic through both parsers.
+- The ESP32 reference node compiles (ESP32 core 3.3.12, NimBLE-Arduino
+  2.5.1, PubSubClient 2.8; 88% of the default app partition), with build
+  instructions in `nodes/README.md`. Still not run on a board.
 - Capture without root on laptops: members of the `wireshark` group record
   the HCI monitor channel through tshark's `bluetooth-monitor` interface;
   the toolkit rewrites it as btsnoop and renders it with `btmon -r`.
   `capture-btmon.sh`, `ble-spam-watch.sh` and `ble-field-run.sh` take that
   route automatically when not root (`need_capture_privileges`), keep the
-  btsnoop artifact, and report progress honestly. Live alerting and Wi-Fi
-  stay root-only. `tests/test-unprivileged-capture.sh`.
+  btsnoop artifact, and report progress honestly. Wi-Fi monitor mode stays
+  root-only. `tests/test-unprivileged-capture.sh`.
 - A second real ambient baseline in the corpus manifest: a Parrot 7.3
   laptop's internal adapter, captured unprivileged (the file itself stays
   git-ignored). Six ambient samples now; the gate holds at zero false
@@ -138,7 +154,8 @@ this into a beta is in `docs/ROADMAP.md`.
 - Detector false positives on ordinary crowds: rules now key on address
   reuse shape, not on volume or on the random-address ratio.
 
-[Unreleased]: https://github.com/ChiefGyk3D/Skid-Finder/compare/v0.3.0-alpha.1...HEAD
+[Unreleased]: https://github.com/ChiefGyk3D/Skid-Finder/compare/v0.4.0-alpha.1...HEAD
+[0.4.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.4.0-alpha.1
 [0.3.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.3.0-alpha.1
 [0.2.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.2.0-alpha.1
 [0.1.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.1.0-alpha.1

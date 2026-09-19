@@ -102,7 +102,8 @@ def materialise(sample, tmpdir):
         return path
 
     if sample["kind"] == "synthetic":
-        name = f"{sample['mode']}-{sample.get('rate', 'default')}-{sample['duration']}-{sample['seed']}.log"
+        name = (f"{sample['mode']}-{sample.get('rate', 'default')}-{sample['duration']}-"
+                f"{sample['seed']}-{sample.get('format', 'btmon')}.log")
         out = os.path.join(tmpdir, name)
         cmd = [
             sys.executable, MAKE_FIXTURE,
@@ -113,21 +114,22 @@ def materialise(sample, tmpdir):
         ]
         if "rate" in sample:
             cmd += ["--rate", str(sample["rate"])]
+        if sample.get("format"):
+            cmd += ["--format", sample["format"]]
         subprocess.run(cmd, check=True)
         return out
 
     sys.exit(f"unknown sample kind: {sample['kind']!r}")
 
 
-def matched_families(capture, profile, empty_conf):
+def matched_families(capture, profile, empty_conf, fmt=None):
     """Run the scanner and return the set of families it reported."""
     # An explicit empty config keeps the result independent of any operator's
     # local config/signatures.conf, exactly as test-ble-signatures.sh does.
-    result = subprocess.run(
-        [sys.executable, SCANNER, "--input", capture,
-         "--profile", profile, "--config", empty_conf],
-        check=True, capture_output=True, text=True,
-    )
+    cmd = [sys.executable, SCANNER, "--input", capture, "--profile", profile, "--config", empty_conf]
+    if fmt:
+        cmd += ["--format", fmt]
+    result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     families = set()
     for line in result.stdout.splitlines():
         if line.startswith("MATCH "):
@@ -139,7 +141,8 @@ def matched_families(capture, profile, empty_conf):
 def describe(sample):
     if sample["kind"] == "real":
         return f"real:{sample['path']}"
-    return f"{sample['mode']}@{sample.get('rate', 'default')}/s×{sample['duration']}s#{sample['seed']}"
+    fmt = f" [{sample['format']}]" if sample.get("format") else ""
+    return f"{sample['mode']}@{sample.get('rate', 'default')}/s×{sample['duration']}s#{sample['seed']}{fmt}"
 
 
 def main():
@@ -186,14 +189,14 @@ def main():
         for profile in PROFILES:
             fp_hits = []
             for sample, capture in ambient:
-                fams = matched_families(capture, profile, empty_conf)
+                fams = matched_families(capture, profile, empty_conf, sample.get("format"))
                 if fams:
                     fp_hits.append((sample, fams))
 
             recall_hits = 0
             family_misses = []
             for sample, capture in spam:
-                fams = matched_families(capture, profile, empty_conf)
+                fams = matched_families(capture, profile, empty_conf, sample.get("format"))
                 if fams:
                     recall_hits += 1
                 expected = set(sample.get("families", []))

@@ -75,7 +75,7 @@ holding personal data, and keep retention short.
 | Node | Status |
 |---|---|
 | Linux / SBC: this toolkit with `MQTT_HOST` set; `ble-live-watch.sh` starts the publisher | publisher and collector tested against a stand-in broker in CI; a real broker has not yet been exercised from this project |
-| ESP32: [`nodes/esp32/skidfinder_node`](../nodes/esp32/skidfinder_node/skidfinder_node.ino) | **alpha: written to the NimBLE-Arduino and PubSubClient APIs, not compiled or run on hardware here** |
+| ESP32: [`nodes/esp32/skidfinder_node`](../nodes/esp32/skidfinder_node/skidfinder_node.ino) | **compiles** against ESP32 core 3.3.12, NimBLE-Arduino 2.5.1, PubSubClient 2.8 (2026-09-18; 88% of the default app partition, see `nodes/README.md`); **not yet run on hardware** |
 
 Both are deliberately thin. A node scans and emits; it does not decide.
 The collector runs the shared detector over each node's recent window, so

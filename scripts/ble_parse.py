@@ -246,6 +246,117 @@ def iter_records(lines: Iterable[str]) -> Iterator[AdRecord]:
         yield current
 
 
+# --- tshark field format ----------------------------------------------------
+#
+# A second way to get advertising reports, for hosts where btmon cannot be
+# run as root: tshark on the 'bluetooth-monitor' interface (open to members
+# of the wireshark group) with exactly these fields, tab separated, all
+# occurrences joined by commas. scripts/lib.sh asks for the same list; keep
+# the two in step. Measured on Wireshark 4.x, 2026-09-18.
+TSHARK_FIELDS = [
+    "frame.time_epoch",
+    "bthci_evt.le_meta_subevent",
+    "bthci_evt.bd_addr",
+    "bthci_evt.le_peer_address_type",
+    "bthci_evt.rssi",
+    "btcommon.eir_ad.entry.device_name",
+    "btcommon.eir_ad.entry.company_id",
+    "btcommon.eir_ad.entry.uuid_16",
+    "btcommon.eir_ad.entry.type",
+    "bthci_evt.le_ext_advts_event_type",
+    "bthci_evt.le_advts_event_type",
+    "bthci_evt.data_length",
+]
+# Only LE Advertising Report (0x02) and LE Extended Advertising Report (0x0d).
+TSHARK_FILTER = "bthci_evt.le_meta_subevent == 0x02 || bthci_evt.le_meta_subevent == 0x0d"
+
+
+def _split_list(text: str) -> List[str]:
+    return [t.strip() for t in text.split(",") if t.strip()]
+
+
+def classify_random_address(address: str) -> str:
+    """Static / resolvable / non-resolvable from the top two bits of a random address.
+
+    btmon labels these for us; tshark reports only public-vs-random, so the
+    class comes from the address itself: 11 static, 01 resolvable, 00
+    non-resolvable (Core spec vol 6 part B 1.3.2).
+    """
+    try:
+        top = int(address[0:2], 16) >> 6
+    except (ValueError, IndexError):
+        return "unknown"
+    return {3: "static", 1: "resolvable", 0: "non-resolvable"}.get(top, "unknown")
+
+
+def parse_tshark_line(line: str) -> Optional[AdRecord]:
+    line = line.rstrip("\n")
+    if not line or line.startswith("#"):
+        return None
+    parts = line.split("\t")
+    if len(parts) < 5:
+        return None
+    parts += [""] * (len(TSHARK_FIELDS) - len(parts))
+
+    addr = parts[2].strip().upper()
+    if not MAC_RE.match(addr):
+        return None
+    record = AdRecord(address=addr)
+    try:
+        record.timestamp = float(parts[0]) if parts[0].strip() else None
+    except ValueError:
+        record.timestamp = None
+
+    addr_type = parts[3].strip().lower()
+    if addr_type in ("0x00", "0", "0x02", "2"):
+        record.addr_type = "public"
+        record.addr_class = "public"
+    else:
+        record.addr_type = "random"
+        record.addr_class = classify_random_address(addr)
+
+    rssi = parts[4].strip()
+    if INT_RE.fullmatch(rssi or "x"):
+        record.rssi = int(rssi)
+
+    names = _split_list(parts[5])
+    if names:
+        record.name = names[-1]
+    # Company ids come out as hex ('0x004c'); the BLE detector's vendor
+    # regex already matches that spelling for Apple. Fingerprints computed
+    # from this path therefore differ from btmon's ('apple, inc.') for the
+    # same device, which docs/README record.
+    record.companies = [c.lower() for c in _split_list(parts[6])]
+    record.service_uuids = [u.lower().replace("0x", "") for u in _split_list(parts[7])]
+
+    ext = parts[9].strip()
+    legacy = parts[10].strip()
+    if ext:
+        record.pdu_type = "ext:" + ext.lower()
+    elif legacy:
+        record.pdu_type = "legacy:" + legacy.lower()
+    length = parts[11].strip()
+    if length.isdigit():
+        record.data_length = int(length)
+    types = [t.lower() for t in _split_list(parts[8])]
+    if "0x01" in types:
+        record.flags = "present"
+    return record
+
+
+def iter_tshark_records(lines: Iterable[str]) -> Iterator[AdRecord]:
+    """Yield advertising records from tshark field lines (see TSHARK_FIELDS)."""
+    for line in lines:
+        record = parse_tshark_line(line)
+        if record is not None:
+            yield record
+
+
+def parse_tshark_records(path: str) -> List[AdRecord]:
+    with open(path, "r", encoding="utf-8", errors="ignore") as handle:
+        return list(iter_tshark_records(handle))
+
+
 def parse_records(path: str) -> List[AdRecord]:
     """Parse a btmon text log into a list of advertising records.
 

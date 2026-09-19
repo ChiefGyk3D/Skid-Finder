@@ -154,7 +154,7 @@ Symptom:
 Fix:
 - `sudo usermod -aG wireshark "$USER"`, log out and in, confirm with `id -nG | grep wireshark` and `tshark -D | grep bluetooth-monitor`. The capture scripts then record through tshark and render with `btmon -r`; nothing else changes.
 - If `tshark -D` lists nothing, dumpcap is not setuid or capability-enabled: `sudo dpkg-reconfigure wireshark-common` and answer yes to non-root capture.
-- Live alerting and Wi-Fi monitor mode are root-only regardless.
+- Live alerting works the same way (tshark streams the reports as fields). Wi-Fi monitor mode is root-only regardless.
 
 ## Wi-Fi monitor mode
 
