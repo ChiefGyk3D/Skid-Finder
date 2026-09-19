@@ -453,8 +453,10 @@ the machine that watches the fleet:
 ```
 
 The collector merges devices across sensors by identity, judges every
-sensor's recent window with the same detector, and estimates where a
-`strong`/`session` device or a flood is, with the error bar stated. Nodes
+sensor's recent window with the same detector, estimates where a
+`strong`/`session` device or a flood is, with the error bar stated, and
+groups a run of alerts into one `fleet-incident/1` record
+(`--incidents-out`) so a SOC gets one ticket per flood. Nodes
 that cannot reach a broker drop files into a directory it watches instead
 (`--watch DIR`), and finished captures can be merged after the fact
 (`--input logs/obs-*.jsonl`). The node contract, including an ESP32
