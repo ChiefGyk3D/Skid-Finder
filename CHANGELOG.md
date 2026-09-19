@@ -10,6 +10,19 @@ would break.
 ## [Unreleased]
 
 ### Added
+- `SECURITY.md` (what counts as a security report for a receive-only tool,
+  where to send it), `CONTRIBUTING.md` (the rules that shape a change and
+  what to include), and `docs/data-handling.md` (what is collected, what it
+  is for and not for, retention, access, what to tell a venue or employer,
+  evidence handoff).
+- CI runs the suite on Python 3.11 (Raspberry Pi OS bookworm) and 3.13
+  (Debian 13, Parrot, Ubuntu 26.04).
+- `fleet-incident/1`: the collector groups a run of related fleet alerts
+  into one incident (open on the first match, closed after
+  `--incident-quiet` seconds without one), carrying sensors and families,
+  the loudest sensor, peak rate, the location track, and the identities
+  the matching sensors heard with their tiers. `--incidents-out` writes
+  the open and close records; the open incident rides in `fleet-state/1`.
 - `systemd/`: `skid-finder-sensor@.service` (live BLE alerting per adapter,
   root or a wireshark-group account), `skid-finder-collector.service`, and
   `skid-finder-retention.timer` running `scripts/retention-sweep.sh`

@@ -60,6 +60,7 @@ from skid_conf import read_conf, setting, version  # noqa: E402
 
 STATE_SCHEMA = "fleet-state/1"
 FLEET_ALERT_SCHEMA = "fleet-alert/1"
+INCIDENT_SCHEMA = "fleet-incident/1"
 CONF_KEYS = ("MQTT_HOST", "MQTT_PORT", "MQTT_TLS", "MQTT_TOPIC_PREFIX")
 EARTH_RADIUS_M = 6371000.0
 MAX_ADDRESSES = 50
@@ -178,10 +179,91 @@ class Identity:
                 series.popleft()
 
 
+class Incident:
+    """A run of related fleet alerts, the unit a SOC ticket wraps.
+
+    An evaluation fires every few seconds while a flood runs; paging on
+    each one is noise. An incident opens on the first evaluation with a
+    match, absorbs every later match until the fleet has been quiet for
+    `quiet` seconds, then closes. It carries first and last seen, the
+    sensors involved and which families each reported, the loudest sensor,
+    the location track (every flood estimate while it ran), and the
+    identities most seen by the matching sensors, with their tiers, so the
+    write-up says what the data supports and nothing more.
+    """
+
+    _counter = 0
+
+    def __init__(self, now):
+        Incident._counter += 1
+        self.id = f"inc-{int(now)}-{Incident._counter}"
+        self.first_seen = now
+        self.last_seen = now
+        self.evaluations = 0
+        self.sensors = {}        # sensor_id -> {"families": set, "peak_rate": float, "matches": int}
+        self.loudest = None
+        self.peak_rate = 0.0
+        self.track = []          # [(ts, lat, lon, spread_m)]
+        self.identities = {}     # key -> {"tier", "name", "count"}
+
+    def absorb(self, now, matching, flood, identities_out, fleet):
+        self.last_seen = now
+        self.evaluations += 1
+        for sensor, stats, matches in matching:
+            entry = self.sensors.setdefault(sensor.id, {"families": set(), "peak_rate": 0.0, "matches": 0})
+            entry["families"].update(m.name for m in matches)
+            entry["peak_rate"] = max(entry["peak_rate"], float(stats.event_rate))
+            entry["matches"] += len(matches)
+            if stats.event_rate > self.peak_rate:
+                self.peak_rate = float(stats.event_rate)
+                self.loudest = sensor.id
+            # Identities the matching sensor heard in this window, by count.
+            for _, rec in sensor.window:
+                ident = fleet.identities.get(fleet.key_for_record(rec))
+                if ident is None:
+                    continue
+                slot = self.identities.setdefault(ident.key, {"tier": ident.tier, "name": ident.name, "count": 0})
+                slot["count"] += 1
+        if flood and flood.get("location"):
+            loc = flood["location"]
+            self.track.append((now, loc["lat"], loc["lon"], loc["spread_m"]))
+
+    def record(self, status, now):
+        top = sorted(self.identities.items(), key=lambda kv: -kv[1]["count"])[:10]
+        return {
+            "schema": INCIDENT_SCHEMA,
+            "id": self.id,
+            "status": status,
+            "ts": now,
+            "first_seen": self.first_seen,
+            "last_seen": self.last_seen,
+            "duration_sec": round(self.last_seen - self.first_seen, 1),
+            "evaluations": self.evaluations,
+            "sensors": {sid: {"families": sorted(e["families"]), "peak_rate": round(e["peak_rate"], 2),
+                              "matches": e["matches"]} for sid, e in self.sensors.items()},
+            "loudest": self.loudest,
+            "peak_rate": round(self.peak_rate, 2),
+            "location": None if not self.track else {
+                "last": {"ts": self.track[-1][0], "lat": self.track[-1][1], "lon": self.track[-1][2],
+                         "spread_m": self.track[-1][3]},
+                "track_points": len(self.track),
+                "note": "event-rate-weighted centroid of the sensors that saw the flood, per evaluation; "
+                        "the source is within spread_m of each point, not at it",
+            },
+            "identities": [{"key": k, "tier": v["tier"], "name": v["name"], "count": v["count"]}
+                           for k, v in top],
+            "note": "a run of related fleet alerts; identities are what the matching sensors heard, "
+                    "not attribution. model-tier keys are products, possibly several people.",
+        }
+
+
 class Fleet:
-    def __init__(self, cfg, window, relative_ok=False, wifi_cfg=None):
+    def __init__(self, cfg, window, relative_ok=False, wifi_cfg=None, incident_quiet=60.0):
         self.cfg = cfg
         self.wifi_cfg = wifi_cfg
+        self.incident_quiet = incident_quiet
+        self.open_incident = None
+        self.closed_incidents = 0
         self.window = window
         self.sensors = {}
         self.identities = {}
@@ -190,6 +272,14 @@ class Fleet:
         self.relative_ok = relative_ok
         self.latest_clock = None
         self.started = time.time()
+
+    @staticmethod
+    def key_for_record(rec):
+        # The identity key an observation was filed under; the observer
+        # computes it, the collector only re-derives the address form here
+        # for records that carried none.
+        key = getattr(rec, "identity_key", None)
+        return key if key else "addr:" + rec.address.lower()
 
     # --- ingest ---------------------------------------------------------------
     def sensor(self, sensor_id):
@@ -245,6 +335,10 @@ class Fleet:
             sensor.window.append((clock, record_from_obs(event)))
 
         key = str(event.get("identity_key") or ("addr:" + str(event["address"]).lower()))
+        # Remember the key on the parsed record so an incident can look up
+        # what a matching sensor heard without re-deriving the fingerprint.
+        if sensor.window:
+            sensor.window[-1][1].identity_key = key
         ident = self.identities.get(key)
         if ident is None:
             ident = self.identities[key] = Identity(key)
@@ -390,7 +484,24 @@ class Fleet:
                             for s, _, ms in matching},
                 "flood": flood,
             })
-        return state, alerts
+
+        # Incidents: open on the first match, absorb while matches continue,
+        # close after the fleet has been quiet for incident_quiet seconds.
+        incidents = []
+        if matching:
+            if self.open_incident is None:
+                self.open_incident = Incident(now)
+                self.open_incident.absorb(now, matching, flood, identities_out, self)
+                incidents.append(self.open_incident.record("open", now))
+            else:
+                self.open_incident.absorb(now, matching, flood, identities_out, self)
+        elif self.open_incident is not None and now - self.open_incident.last_seen >= self.incident_quiet:
+            incidents.append(self.open_incident.record("closed", now))
+            self.closed_incidents += 1
+            self.open_incident = None
+        state["incident"] = None if self.open_incident is None else self.open_incident.record("open", now)
+        state["incidents_closed"] = self.closed_incidents
+        return state, alerts, incidents
 
 
 # --- sources ---------------------------------------------------------------------
@@ -508,16 +619,24 @@ def summarize(state, alerts, out):
     out.flush()
 
 
-def emit(fleet, now, args, alerts_handle):
-    state, alerts = fleet.evaluate(now)
+def emit(fleet, now, args, alerts_handle, incidents_handle=None):
+    state, alerts, incidents = fleet.evaluate(now)
     if args.state:
         write_state(args.state, state)
     if alerts_handle is not None:
         for alert in alerts:
             alerts_handle.write(json.dumps(alert, sort_keys=True) + "\n")
         alerts_handle.flush()
+    if incidents_handle is not None:
+        for inc in incidents:
+            incidents_handle.write(json.dumps(inc, sort_keys=True) + "\n")
+        incidents_handle.flush()
     if not args.quiet:
         summarize(state, alerts, sys.stdout)
+        for inc in incidents:
+            sys.stdout.write(f"  INCIDENT {inc['id']} {inc['status']}: sensors={','.join(inc['sensors'])} "
+                             f"duration={inc['duration_sec']}s loudest={inc['loudest']}\n")
+        sys.stdout.flush()
     return state, alerts
 
 
@@ -540,6 +659,9 @@ def main() -> int:
     parser.add_argument("--wifi-config", default=wifi_signatures.config_path_default())
     parser.add_argument("--state", help="write the fleet-state/1 snapshot here after each evaluation")
     parser.add_argument("--alerts-out", help="append fleet-alert/1 records here")
+    parser.add_argument("--incidents-out", help="append fleet-incident/1 records here (open and close)")
+    parser.add_argument("--incident-quiet", type=float, default=60.0,
+                        help="seconds without any match before an incident closes (default 60)")
     parser.add_argument("--from-now", action="store_true",
                         help="with --watch: ignore what is already in the files")
     parser.add_argument("--relative-ok", action="store_true",
@@ -551,8 +673,10 @@ def main() -> int:
 
     cfg = ble_signatures.load_config(args.profile, args.config)
     wifi_cfg = wifi_signatures.load_config(args.profile, args.wifi_config)
-    fleet = Fleet(cfg, args.window, relative_ok=args.relative_ok, wifi_cfg=wifi_cfg)
+    fleet = Fleet(cfg, args.window, relative_ok=args.relative_ok, wifi_cfg=wifi_cfg,
+                  incident_quiet=args.incident_quiet)
     alerts_handle = open(args.alerts_out, "a", encoding="utf-8") if args.alerts_out else None
+    incidents_handle = open(args.incidents_out, "a", encoding="utf-8") if args.incidents_out else None
     if args.state:
         directory = os.path.dirname(os.path.abspath(args.state))
         os.makedirs(directory, exist_ok=True)
@@ -572,10 +696,18 @@ def main() -> int:
                 if next_eval is None:
                     next_eval = now + args.interval
                 while now >= next_eval:
-                    emit(fleet, next_eval, args, alerts_handle)
+                    emit(fleet, next_eval, args, alerts_handle, incidents_handle)
                     evals += 1
                     next_eval += args.interval
-            emit(fleet, fleet.latest_clock or time.time(), args, alerts_handle)
+            emit(fleet, fleet.latest_clock or time.time(), args, alerts_handle, incidents_handle)
+            # End of the record: close whatever is still open so the file
+            # ends with a complete incident rather than a dangling one.
+            if fleet.open_incident is not None:
+                inc = fleet.open_incident.record("closed", fleet.latest_clock or time.time())
+                inc["note"] = "closed at end of input; " + inc["note"]
+                if incidents_handle is not None:
+                    incidents_handle.write(json.dumps(inc, sort_keys=True) + "\n")
+                fleet.open_incident = None
             return 0
 
         inbox = queue.Queue()
@@ -605,7 +737,7 @@ def main() -> int:
                     break
                 fleet.ingest(record, arrival)
             if time.monotonic() - last_eval >= args.interval:
-                emit(fleet, time.time(), args, alerts_handle)
+                emit(fleet, time.time(), args, alerts_handle, incidents_handle)
                 last_eval = time.monotonic()
                 evals += 1
                 if args.max_evals and evals >= args.max_evals:
@@ -619,6 +751,8 @@ def main() -> int:
     finally:
         if alerts_handle is not None:
             alerts_handle.close()
+        if incidents_handle is not None:
+            incidents_handle.close()
     return 0
 
 

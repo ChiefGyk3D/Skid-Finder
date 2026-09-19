@@ -187,9 +187,9 @@ years. The difference is operations, not detection.
 - **Access, retention, privacy.** Records contain personal data. The
   collector gets TLS, per-sensor credentials, a read-only role for
   dashboards, retention limits by record type (observations short, alerts
-  and incidents long), and a written data-handling note a venue can sign
-  off on. An enterprise offering that cannot answer "who can see this and
-  for how long" is not one.
+  and incidents long). The written data-handling note a venue can sign off
+  on exists now: `docs/data-handling.md`. An enterprise offering that
+  cannot answer "who can see this and for how long" is not one.
 - **Packaging.** A `skid-finder-collector` unit (systemd service, config
   under `/etc`) beside the field tool, both carried by Hammunition, and
   an image for the ESP32 sensor.
