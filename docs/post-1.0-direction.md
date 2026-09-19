@@ -169,11 +169,12 @@ years. The difference is operations, not detection.
   the identities involved, and the evidence files. That is the unit a SOC
   ticket wraps, and the thing an analyst is paged for once, not every five
   seconds.
-- **Evidence bundle.** One command produces the handoff for venue security
-  or law enforcement: the btsnoop and pcapng, the observation and alert
-  records for the window, the incident summary, and a hash manifest. What
-  it contains is other people's device addresses, so the bundle is
-  scoped to the incident window and the involved identities, not the day.
+- **Evidence bundle.** *Exists now* (`scripts/evidence-bundle.sh`): the
+  observation, alert and incident records for the window, the traces whose
+  run overlapped it, a summary and a sha256 manifest, scoped to the
+  incident window rather than the day. Scoping to the involved identities
+  only (rather than every device heard in the window) is the remaining
+  refinement.
 - **Foxhunt handoff.** The collector's estimate is the starting point; a
   handheld (the uConsole) takes over from there. The handoff is a target
   set (identity key, current addresses, last centroid, last seen) the
