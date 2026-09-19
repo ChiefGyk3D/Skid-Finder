@@ -9,6 +9,15 @@ would break.
 
 ## [Unreleased]
 
+## [0.6.0-alpha.1] — 2026-09-19
+
+**Alpha.** The SOC handoff release: one incident per flood with a target
+set the handheld loads in one flag, an evidence bundle scoped to the
+incident window, identity keys that agree across the btmon and tshark
+capture paths, and Wi-Fi fingerprinting of randomised clients. Everything
+was measured against synthetic traffic and stubbed tools in CI; the
+uConsole checklist is unchanged.
+
 ### Added
 - Wi-Fi fingerprinting: `scripts/wifi_identity.py` keys a probe request
   or beacon from a randomised MAC by its content (tag order, supported
@@ -34,6 +43,7 @@ would break.
   sha256 manifest into one archive under `logs/evidence/`.
   `tests/test-evidence-bundle.sh` verifies the scoping and that the
   manifest checks out after extraction.
+
 ### Changed
 - Fingerprints (identity keys `fp:…`) are version 2: built from Bluetooth
   SIG company ids and a normalised PDU class instead of vendor strings and
@@ -235,7 +245,8 @@ this into a beta is in `docs/ROADMAP.md`.
 - Detector false positives on ordinary crowds: rules now key on address
   reuse shape, not on volume or on the random-address ratio.
 
-[Unreleased]: https://github.com/ChiefGyk3D/Skid-Finder/compare/v0.5.0-alpha.1...HEAD
+[Unreleased]: https://github.com/ChiefGyk3D/Skid-Finder/compare/v0.6.0-alpha.1...HEAD
+[0.6.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.6.0-alpha.1
 [0.5.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.5.0-alpha.1
 [0.4.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.4.0-alpha.1
 [0.3.0-alpha.1]: https://github.com/ChiefGyk3D/Skid-Finder/releases/tag/v0.3.0-alpha.1
