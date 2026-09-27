@@ -196,6 +196,24 @@ Secondary path (other apt-based Linux devices):
 sudo ./scripts/setup-linux.sh
 ```
 
+Through [Hammunition](https://github.com/ChiefGyk3D/Hammunition), on a Debian-family
+workstation it manages:
+
+```bash
+hammunition install skid-finder
+```
+
+That installs the pinned release tarball (not `main`), checksum-verified, into
+`/usr/local/share/hammunition/skid-finder`, hands the tree to your account so
+`config/` and `logs/` are writable, adds a `skid-finder` launcher and a menu
+entry, and pulls in `bluez`, `python3`, `rfkill`, `tmux`, `whiptail`, `iw`,
+`tshark` and `python3-paho-mqtt` from apt. It does not install the optional
+`bluez-tools` or `wireless-tools`; add them yourself if you want them. It is
+also a member of Hammunition's `rf-security` profile, and `hammunition
+uninstall skid-finder` removes all of it. Verified installing and uninstalling
+cleanly on Parrot 7.3, 2026-09-27; the pin lags this repository between
+releases.
+
 Both installers install `bluez`, `python3`, `rfkill` and `tmux` as hard
 requirements, then add `bluez-tools`, `wireless-tools`, `iw` and `tshark`
 individually, skipping any that the distribution does not carry. They verify
