@@ -1,3 +1,13 @@
+# Lint, shell checks and the test suite. The jobs live in
+# ChiefGyk3D/git-your-ship-together; its `CI green` job in each of the two
+# callers below is what branch protection watches (`ci / CI green` and
+# `shell / CI green`).
+#
+# What stays specific to this repository: the test suite is a bash script
+# (tests/test-toolkit.sh) that wants the example configs copied into place and
+# the scripts executable, so python-ci runs it as its test command, on the two
+# Pythons the project supports. 3.11 is Raspberry Pi OS bookworm (the
+# uConsole); 3.13 is Debian 13, Parrot 7 and Ubuntu 26.04.
 name: CI
 
 on:
@@ -6,47 +16,38 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  test:
-    name: Validate and test (Python ${{ matrix.python }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # 3.11 is Raspberry Pi OS bookworm (the uConsole); 3.13 is Debian 13,
-        # Parrot 7 and Ubuntu 26.04 (laptops and the collector).
-        python: ["3.11", "3.13"]
+  ci:
+    uses: ChiefGyk3D/git-your-ship-together/.github/workflows/python-ci.yml@0e58a0e61ea8b3800d1cb0e6ed81bb860ace2094 # v1.6.3
+    permissions:
+      contents: read
+    with:
+      python-versions: '["3.11", "3.13"]'
+      install-command: python -m pip install --upgrade pip
+      lint-command: ruff check scripts/*.py tests/*.py
+      test-command: |
+        cp config/interfaces.conf.example config/interfaces.conf
+        cp config/signatures.conf.example config/signatures.conf
+        chmod +x scripts/*.sh tests/*.sh
+        ./tests/test-toolkit.sh
+      docker-build: false
+      egress-policy: block
 
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Install shellcheck
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-
-      - name: Seed local config from examples
-        run: |
-          cp config/interfaces.conf.example config/interfaces.conf
-          cp config/signatures.conf.example config/signatures.conf
-
-      - name: Make scripts executable
-        run: chmod +x scripts/*.sh tests/*.sh
-
-      - name: Install ruff
-        run: pip install ruff
-
-      - name: Run shellcheck
-        run: shellcheck -S warning -x scripts/*.sh tests/*.sh
-
-      - name: Run ruff
-        run: ruff check scripts/*.py tests/*.py
-
-      - name: Run test suite
-        run: ./tests/test-toolkit.sh
+  shell:
+    uses: ChiefGyk3D/git-your-ship-together/.github/workflows/bash-ci.yml@0e58a0e61ea8b3800d1cb0e6ed81bb860ace2094 # v1.6.3
+    permissions:
+      contents: read
+    with:
+      shfmt-args: -i 2 -ci
+      # The existing scripts were never held to shfmt. Report a diff without
+      # failing until a formatting pass lands, then delete this line.
+      shfmt-continue-on-error: true
+      workflow-lint: false   # python-ci's job already lints the workflow files
+      egress-policy: block

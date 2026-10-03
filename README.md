@@ -661,6 +661,15 @@ Ubuntu 26.04). To match CI locally, install `shellcheck`:
 sudo apt install -y shellcheck
 ```
 
+CI and security scanning are called from
+[git-your-ship-together](https://github.com/ChiefGyk3D/git-your-ship-together)'s
+reusable workflows, pinned by commit. Branch protection on `main` requires
+these checks:
+
+- `ci / CI green` (ruff and the test suite on Python 3.11 and 3.13)
+- `shell / CI green` (shellcheck and shfmt over every shell script)
+- `security / CodeQL` and `security / Secret scan (gitleaks)` (the security workflow has no gate job of its own; Semgrep, dependency review and Scorecard report without being required)
+
 ## How scanning works
 
 `btmon` is a passive observer of the local HCI channel. It does not start a scan
