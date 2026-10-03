@@ -1,6 +1,7 @@
+# Keeps the pinned action SHAs moving; each bump is read, not just merged.
 version: 2
 updates:
-  - package-ecosystem: pip
+  - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
@@ -8,14 +9,6 @@ updates:
     # waiting a week before proposing it costs nothing.
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
     groups:
-      python-dependencies:
-        patterns: ['*']
-
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 7
+      actions:
+        patterns: ["*"]
