@@ -10,6 +10,12 @@ would break.
 ## [Unreleased]
 
 ### Changed
+- CI and security scanning run through the reusable workflows in
+  git-your-ship-together, pinned at v1.6.3: `python-ci` (ruff and the test
+  suite on Python 3.11 and 3.13), `bash-ci` (shellcheck, and shfmt in report
+  mode) and `security` (CodeQL, gitleaks, Semgrep, dependency review,
+  Scorecard). The hand-written workflow is gone, a Dependabot entry keeps
+  the action pins current, and the required checks are listed in the README.
 - README opens with a Status section: the CI badge, the current version
   and stage, what alpha means here, a table of every capability with the
   version it landed in and what it has been measured against, and the
