@@ -28,6 +28,7 @@ jobs:
     uses: ChiefGyk3D/git-your-ship-together/.github/workflows/python-ci.yml@0e58a0e61ea8b3800d1cb0e6ed81bb860ace2094 # v1.6.3
     permissions:
       contents: read
+      id-token: write   # python-ci's coverage job asks for it, and GitHub refuses to start the workflow without it; nothing here uses Doppler or Codecov
     with:
       python-versions: '["3.11", "3.13"]'
       install-command: python -m pip install --upgrade pip
