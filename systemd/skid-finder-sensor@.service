@@ -1,0 +1,40 @@
+# Skid Finder fixed sensor: live BLE alerting on one adapter, records
+# published to the broker when config/interfaces.conf names one.
+#
+# Instance name is the adapter: skid-finder-sensor@hci0.service.
+#
+# Install (see docs/fixed-sensor.md):
+#   sudo cp systemd/skid-finder-sensor@.service /etc/systemd/system/
+#   sudo systemctl edit skid-finder-sensor@hci0   # set SKID_FINDER_HOME, User
+#   sudo systemctl enable --now skid-finder-sensor@hci0
+#
+# Runs as root by default because btmon needs CAP_NET_RAW. On a host whose
+# operator is in the wireshark group, set User= to that account and the
+# scripts take the unprivileged route on their own; the tree must then be
+# owned by that account (logs/ is written beside the scripts).
+[Unit]
+Description=Skid Finder BLE sensor on %i
+Documentation=https://github.com/ChiefGyk3D/Skid-Finder
+After=bluetooth.target network-online.target
+Wants=bluetooth.target network-online.target
+
+[Service]
+Type=simple
+Environment=SKID_FINDER_HOME=/usr/local/share/hammunition/skid-finder
+# Duration 0 = until stopped; the wrapper writes a new trace, observation
+# and alert file per start, so a restart is a clean new run.
+ExecStart=/bin/bash -c 'cd "${SKID_FINDER_HOME}" && exec ./scripts/ble-live-watch.sh %i 0 balanced'
+WorkingDirectory=/usr/local/share/hammunition/skid-finder
+Restart=on-failure
+RestartSec=10
+# Everything the run needs to stop cleanly (scan off, publisher, trace) is
+# on the EXIT trap, which SIGTERM reaches.
+KillSignal=SIGTERM
+TimeoutStopSec=20
+NoNewPrivileges=false
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

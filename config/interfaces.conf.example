@@ -27,3 +27,33 @@ SCAN_SECONDS="30"
 
 # Alert threshold: advertisements per sender in one scan window.
 ALERT_ADS_PER_ADDR="40"
+
+# Sensor identity. Every normalized observation (scripts/ble-observe.py) is
+# stamped with these so captures from several devices can be told apart and,
+# eventually, combined for triangulation. SENSOR_ID should be unique per
+# device; SENSOR_LAT/SENSOR_LON are this sensor's fixed position in decimal
+# degrees when it is stationary, or left blank for a device that moves (a
+# per-observation GPS track is merged separately by scripts/ble-gps-merge.py).
+SENSOR_ID="uconsole-01"
+SENSOR_LAT=""
+SENSOR_LON=""
+
+# Sensor-net transport. When MQTT_HOST is set, ble-live-watch.sh also ships
+# every observation and alert record to the broker (scripts/ble-publish.py)
+# on <MQTT_TOPIC_PREFIX>/<SENSOR_ID>/{obs,alerts,status}, and the collector
+# (scripts/ble-collector.py --mqtt) reads them back. Leave MQTT_HOST empty
+# for a stand-alone sensor. Credentials never go in this file: set
+# MQTT_USERNAME and MQTT_PASSWORD in the environment of the publishing shell.
+MQTT_HOST=""
+MQTT_PORT="1883"
+MQTT_TLS="no"
+MQTT_TOPIC_PREFIX="skidfinder"
+
+# Wi-Fi (passive monitor mode). WIFI_IFACE is the adapter to listen on; on
+# the uConsole + AC1200 the MT7921 usually appears as wlan1 with the CM4's
+# own radio on wlan0. Leave WIFI_IFACE empty on hosts without a monitor-
+# capable adapter. WIFI_CHANNELS is the hop list (2.4 GHz 1 6 11 covers most
+# attack tooling; add 36 40 44 48 for 5 GHz), WIFI_DWELL_MS the time on each.
+WIFI_IFACE=""
+WIFI_CHANNELS="1 6 11"
+WIFI_DWELL_MS="250"

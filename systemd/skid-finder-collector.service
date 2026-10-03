@@ -1,0 +1,31 @@
+# Skid Finder collector: merges records from every sensor over MQTT, writes
+# the fleet state snapshot, fleet alerts and incidents under logs/.
+#
+# Install (see docs/fixed-sensor.md):
+#   sudo cp systemd/skid-finder-collector.service /etc/systemd/system/
+#   sudo systemctl edit skid-finder-collector     # set SKID_FINDER_HOME, User
+#   sudo systemctl enable --now skid-finder-collector
+#
+# Needs no radio and no root: run it as the account that owns the tree.
+# MQTT_USERNAME / MQTT_PASSWORD belong in a drop-in with EnvironmentFile=
+# pointing at a root-only file, never in this unit.
+[Unit]
+Description=Skid Finder fleet collector
+Documentation=https://github.com/ChiefGyk3D/Skid-Finder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=SKID_FINDER_HOME=/usr/local/share/hammunition/skid-finder
+ExecStart=/bin/bash -c 'cd "${SKID_FINDER_HOME}" && exec python3 ./scripts/ble-collector.py --mqtt --state logs/fleet-state.json --alerts-out logs/fleet-alerts.jsonl --incidents-out logs/fleet-incidents.jsonl --quiet'
+WorkingDirectory=/usr/local/share/hammunition/skid-finder
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

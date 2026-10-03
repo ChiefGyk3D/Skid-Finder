@@ -1,3 +1,13 @@
+# Lint, shell checks, the test suite and the ESP32 firmware build. The jobs
+# live in ChiefGyk3D/git-your-ship-together; its `CI green` job in each of the
+# three callers below is what branch protection watches (`ci / CI green`,
+# `shell / CI green` and `firmware / CI green`).
+#
+# What stays specific to this repository: the test suite is a bash script
+# (tests/test-toolkit.sh) that wants the example configs copied into place and
+# the scripts executable, so python-ci runs it as its test command, on the two
+# Pythons the project supports. 3.11 is Raspberry Pi OS bookworm (the
+# uConsole); 3.13 is Debian 13, Parrot 7 and Ubuntu 26.04.
 name: CI
 
 on:
@@ -6,35 +16,65 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  test:
-    name: Validate and test
-    runs-on: ubuntu-latest
+  ci:
+    uses: ChiefGyk3D/git-your-ship-together/.github/workflows/python-ci.yml@da9fa322b13a867980fa363ea87f86065a18cd19 # v1.7.0
+    permissions:
+      contents: read
+      id-token: write   # python-ci's coverage job asks for it, and GitHub refuses to start the workflow without it; nothing here uses Doppler or Codecov
+    with:
+      python-versions: '["3.11", "3.13"]'
+      install-command: python -m pip install --upgrade pip
+      lint-command: ruff check scripts/*.py tests/*.py
+      test-command: |
+        cp config/interfaces.conf.example config/interfaces.conf
+        cp config/signatures.conf.example config/signatures.conf
+        chmod +x scripts/*.sh tests/*.sh
+        ./tests/test-toolkit.sh
+      # Ubuntu on x86_64 and on arm64 (the Pi and the uConsole are arm64), and the
+      # same suite inside Debian 12 (Raspberry Pi OS bookworm's Python 3.11),
+      # Debian 13 and Ubuntu 24.04 images on both architectures.
+      runners: '["ubuntu-24.04", "ubuntu-24.04-arm"]'
+      distros: '["debian:12", "debian:13", "ubuntu:24.04"]'
+      distro-runners: '["ubuntu-24.04", "ubuntu-24.04-arm"]'
+      docker-build: false
+      egress-policy: block
 
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+  shell:
+    uses: ChiefGyk3D/git-your-ship-together/.github/workflows/bash-ci.yml@da9fa322b13a867980fa363ea87f86065a18cd19 # v1.7.0
+    permissions:
+      contents: read
+    with:
+      shfmt-args: -i 2 -ci
+      # The existing scripts were never held to shfmt (178 hunks in 39 of the 42
+      # scripts at -i 2 -ci; shellcheck at warning is clean). Report a diff
+      # without failing until a formatting pass lands, then delete this line.
+      shfmt-continue-on-error: true
+      workflow-lint: false   # python-ci's job already lints the workflow files
+      egress-policy: block
 
-      - name: Install shellcheck
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Seed local config from examples
-        run: |
-          cp config/interfaces.conf.example config/interfaces.conf
-          cp config/signatures.conf.example config/signatures.conf
-
-      - name: Make scripts executable
-        run: chmod +x scripts/*.sh tests/*.sh
-
-      - name: Run shellcheck
-        run: shellcheck -S warning -x scripts/*.sh tests/*.sh
-
-      - name: Run test suite
-        run: ./tests/test-toolkit.sh
+  # The ESP32 sensor node. The same build the README measured on 2026-09-18:
+  # ESP32 core 3.3.12, NimBLE-Arduino 2.5.1, PubSubClient 2.8, compiled for
+  # esp32:esp32:esp32. No host-side tests exist for it, so there is no
+  # test-command, no distros and no runners to choose: arduino-ci compiles on
+  # one Ubuntu runner and keeps the binary as an artifact.
+  firmware:
+    uses: ChiefGyk3D/git-your-ship-together/.github/workflows/arduino-ci.yml@da9fa322b13a867980fa363ea87f86065a18cd19 # v1.7.0
+    permissions:
+      contents: read
+    with:
+      sketches: nodes/esp32/skidfinder_node
+      fqbn: esp32:esp32:esp32
+      cores: esp32:esp32@3.3.12
+      additional-urls: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+      libraries: NimBLE-Arduino@2.5.1 PubSubClient@2.8
+      workflow-lint: false   # python-ci's job already lints the workflow files
+      egress-policy: block
+      extra-allowed-endpoints: espressif.github.io:443 dl.espressif.com:443

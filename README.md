@@ -19,6 +19,64 @@ Out-of-box defaults are single-adapter safe:
 - scripts auto-fallback to `hci0` if `hci1` is missing or unstable
 - one-command mode switch is available for `dual`, `single`, and `auto`
 
+## Status
+
+[![CI](https://github.com/ChiefGyk3D/Skid-Finder/actions/workflows/ci.yml/badge.svg)](https://github.com/ChiefGyk3D/Skid-Finder/actions/workflows/ci.yml)
+
+Current version: **0.6.0-alpha.1** (alpha), released 2026-09-19.
+
+**Alpha** means every capability below is complete and green in CI on
+Python 3.11 and 3.13 against synthetic captures and stubbed radios, and the
+BLE paths have additionally been run on one laptop's real adapter. Nothing
+has been confirmed on the uConsole + AIO v2 yet. A match is a lead, not a
+verdict.
+
+| Capability | Since | Measured against |
+|---|---|---|
+| BLE spam detector, three profiles, precision/recall gate | 0.1.0 | labeled corpus (synthetic spam, six real ambient captures); thresholds set on the BSidesLV 2026 floor |
+| Device fingerprinting with identity tiers, sighting history, watchlist, foxhunt | 0.1.0 | real conference captures; one laptop foxhunt |
+| Normalized records (`ble-obs/1`, `ble-alert/1`), live alerting, field menu | 0.1.0 | synthetic traffic; one laptop live watch |
+| Sensor net: MQTT publisher, collector, location estimate, ESP32 sketch | 0.2.0 | stand-in broker in CI; the sketch compiles but has not run on a board |
+| Wi-Fi: deauth/disassoc, beacon flood, evil twin, KARMA detection | 0.3.0 | synthetic traffic only; never run on the AC1200 |
+| Root-free BLE on laptops (`wireshark` group, tshark route) | 0.4.0 | a Parrot 7.3 laptop, 2026-09-18 |
+| Fleet incidents, foxhunt handoff, evidence bundle, systemd units, doctor | 0.5.0 to 0.6.0 | synthetic fleet fixtures in CI |
+| Wi-Fi fingerprinting across MAC rotation | 0.6.0 | synthetic traffic only |
+
+What moves this to **beta** is the hardware checklist in
+[docs/ROADMAP.md](docs/ROADMAP.md), tracked by
+[issue #1](https://github.com/ChiefGyk3D/Skid-Finder/issues/1). It needs the
+uConsole, the AC1200 and a Flipper Zero in a contained space; the first
+command to run there is `./scripts/skid-finder.sh --doctor`. Every release
+is recorded in [CHANGELOG.md](CHANGELOG.md) and published on the
+[releases page](https://github.com/ChiefGyk3D/Skid-Finder/releases);
+`./scripts/skid-finder.sh --version` prints the version of a checkout. The
+stage definitions, the milestone table and the release procedure are in
+[docs/ROADMAP.md](docs/ROADMAP.md), and `tests/test-versioning.sh` fails
+the build if this section, `VERSION` and the changelog disagree.
+
+## Quick start on a laptop or desktop
+
+Any Linux machine with a BlueZ-visible Bluetooth adapter can run the BLE
+side, and no root is needed if you are in the `wireshark` group. Five
+minutes from clone to a verdict:
+
+```bash
+git clone https://github.com/ChiefGyk3D/Skid-Finder.git && cd Skid-Finder
+sudo ./scripts/setup-linux.sh            # bluez, python3, tshark, iw, whiptail...
+sudo usermod -aG wireshark "$USER"       # once; log out and in again
+./scripts/skid-finder.sh --doctor        # what this machine can do, with fixes
+./scripts/skid-finder.sh --run setup     # config files from the examples
+./scripts/ble-field-run.sh hci0 60       # capture, summary, signature scan
+./scripts/ble-live-watch.sh hci0         # live alerts until Ctrl+C
+./scripts/skid-finder.sh                 # or the menu
+```
+
+Nothing should match on ordinary traffic. If something does, record the
+capture as your baseline (`scripts/add-corpus-sample.sh --label ambient`)
+and raise the threshold it tripped; the README section on baselining says
+how. Wi-Fi detection needs a monitor-capable adapter and root:
+[docs/wifi-notes.md](docs/wifi-notes.md).
+
 ## Legal and Safety
 
 **Operator Qualifications & Compliance:**
@@ -53,14 +111,34 @@ This toolkit is designed to **detect and analyze** BLE spam—**not to generate 
 
 ## Features
 
-- Discover available HCI adapters
-- Capture raw BLE monitor output via `btmon`
-- Summarize top BLE advertisers and flag high-rate senders
-- Match defensive signatures for common scripted BLE spam/flood behaviors
-- Live target RSSI tracking for hot/cold foxhunt movement
-- Optional dual-pane tmux session for monitor + hunt workflow
-- One-command capture plus summary report for field sessions
-- Reversible AIO feature profiles to reduce noise and power draw during BLE operations
+Everything is receive-only. The toolkit detects and never transmits.
+
+- **BLE spam detection**: signatures for the common scripted floods
+  (Flipper-style Apple popups, Marauder-style rotating beacons, Fast Pair
+  lures, random-address churn, lure-name rotation), keyed on address-reuse
+  shape rather than volume, with three sensitivity profiles and a
+  precision/recall gate against a labeled corpus.
+- **Identity across MAC rotation**: fingerprints with a stated tier
+  (`strong`, `session`, `model`, `ambiguous`), a sighting history, a
+  watchlist, and identity keys that agree whichever capture path heard the
+  device.
+- **Foxhunting**: median-RSSI tracking of one address, of every address a
+  named or fingerprinted target is using, or of the target set an incident
+  hands over.
+- **Live alerting** over a sliding window with the same detector as the
+  batch scan, writing normalized JSON Lines a SIEM ingests as-is.
+- **Sensor net**: an MQTT publisher, a collector that merges several
+  sensors by identity, judges each one, estimates location with its error
+  bar, and groups a flood into one incident; an ESP32 reference node.
+- **Wi-Fi**: passive detection of deauth/disassoc floods, beacon floods,
+  evil twins and KARMA responders, plus fingerprinting of randomised
+  clients, in the same record shape.
+- **Handoff**: an evidence bundle scoped to one incident with a sha256
+  manifest, a data-handling note, and a nightly retention sweep.
+- **Operations**: a field menu for one-handed use, a doctor that reports
+  what a machine can do with fixes, systemd units for a fixed sensor and
+  the collector, root-free BLE capture on laptops, reversible AIO feature
+  profiles, adapter mode switching, and health and recovery scripts.
 
 ## Hardware
 
@@ -118,6 +196,24 @@ Secondary path (other apt-based Linux devices):
 sudo ./scripts/setup-linux.sh
 ```
 
+Through [Hammunition](https://github.com/ChiefGyk3D/Hammunition), on a Debian-family
+workstation it manages:
+
+```bash
+hammunition install skid-finder
+```
+
+That installs the pinned release tarball (not `main`), checksum-verified, into
+`/usr/local/share/hammunition/skid-finder`, hands the tree to your account so
+`config/` and `logs/` are writable, adds a `skid-finder` launcher and a menu
+entry, and pulls in `bluez`, `python3`, `rfkill`, `tmux`, `whiptail`, `iw`,
+`tshark` and `python3-paho-mqtt` from apt. It does not install the optional
+`bluez-tools` or `wireless-tools`; add them yourself if you want them. It is
+also a member of Hammunition's `rf-security` profile, and `hammunition
+uninstall skid-finder` removes all of it. Verified installing and uninstalling
+cleanly on Parrot 7.3, 2026-09-27; the pin lags this repository between
+releases.
+
 Both installers install `bluez`, `python3`, `rfkill` and `tmux` as hard
 requirements, then add `bluez-tools`, `wireless-tools`, `iw` and `tshark`
 individually, skipping any that the distribution does not carry. They verify
@@ -135,6 +231,55 @@ Confirm the install before relying on it in the field:
 ```bash
 ./tests/test-toolkit.sh
 ```
+
+### First run on any machine: doctor
+
+```bash
+./scripts/skid-finder.sh --doctor
+```
+
+One screen of measurements, never guesses: which tools are present, whether
+BLE capture works without root here, which adapters exist and are up,
+whether the configured Wi-Fi interface supports monitor mode and whether it
+carries your default route, and which config files are missing. Every miss
+is printed with its fix. It is also the first entry in the menu.
+
+### Running on a laptop without root
+
+`btmon` needs a capability only root has, but a laptop has another way in.
+Members of the `wireshark` group can record the same HCI monitor channel
+through tshark's `bluetooth-monitor` interface; the toolkit rewrites that
+as btsnoop and renders it with `btmon -r`, so the capture, field run and
+spam sweep work without `sudo`:
+
+```bash
+sudo usermod -aG wireshark "$USER"   # once, then log in again
+tshark -D | grep bluetooth-monitor   # must be listed
+./scripts/capture-btmon.sh hci0 30    # no sudo
+./scripts/ble-field-run.sh hci0 60
+```
+
+Live alerting and foxhunting work without root too: `ble-live-watch.sh`
+streams the same advertising reports from tshark as fields, one line per
+report, into the same observer and detector, and a second tshark keeps the
+btsnoop trace; `foxhunt-rssi.sh` takes its address and RSSI pairs from the
+same stream. When the unprivileged route is available the menu drops `sudo` from the
+BLE actions automatically; Wi-Fi and the AIO profiles keep it. Differences
+from the root path: the batch captures render their text
+log when the capture ends (so running counts are not shown), the monitor
+channel carries every adapter rather than one. A device's identity key is
+the same whichever path heard it: fingerprints
+are built from vendor ids and a normalised PDU class rather than the
+strings each tool spells differently, so a laptop and a uConsole in one
+sensor net file a device under one key. Wi-Fi monitor mode still needs
+root.
+
+Measured on a Parrot 7.3 laptop on 2026-09-18: a 30 s unprivileged capture
+rendered 74 advertising reports and matched no signature on any profile
+(recorded as a real ambient baseline in the corpus), and a 25 s
+unprivileged live watch produced 67 observations with absolute timestamps,
+a converted btsnoop trace and alert records. The corpus gate also holds
+the same verdict on the same synthetic traffic in both spellings.
 
 ## Configure Interfaces
 
@@ -176,6 +321,28 @@ Mode behavior:
 - `auto`: uses dual when `hci1` exists, otherwise single-like fallback
 
 ## Usage
+
+### 0) The field menu
+
+Everything below is a script with positional arguments, which is a poor fit
+for a uConsole used one-handed, standing up. The menu covers the common paths
+so nothing has to be typed from memory:
+
+```bash
+./scripts/skid-finder.sh
+```
+
+It only builds command lines. Each action shows the exact command before it
+runs, every action is reachable without the menu, and as a normal user only
+the radio actions are prefixed with `sudo`, so analysis artifacts such as
+`logs/sightings.json` stay owned by you. It uses `whiptail`, which Raspberry
+Pi OS already ships. For scripting or when there is no terminal:
+
+```bash
+./scripts/skid-finder.sh --list                 # actions and their arguments
+./scripts/skid-finder.sh --print field hci0 120 # show the command, run nothing
+./scripts/skid-finder.sh --run watch            # run one action and exit
+```
 
 ### 1) Detection sweep
 
@@ -304,12 +471,135 @@ Read the tier warning it prints. If the target resolved at `model` or
 `ambiguous` tier the address set may span several different devices, and the
 RSSI trend will jump between them as you walk.
 
+To take the collector's handoff instead, when an incident has been
+recorded (`ble-collector.py --incidents-out`): the incident carries the
+addresses the matching sensors heard most, reliable identities first, and
+the tracker loads them in one flag. `--list-targets` shows what it would
+hunt without touching the radio; from the menu, answer `incident` to the
+foxhunt prompt.
+
+```bash
+sudo ./scripts/foxhunt-rssi.sh --from-incident logs/fleet-incidents.jsonl
+./scripts/foxhunt-rssi.sh --from-incident logs/fleet-incidents.jsonl --list-targets
+```
+
 To supply targets yourself:
 
 ```bash
 ./scripts/ble-fingerprint.py --input logs/capture.log --hunt "whoop" > targets.txt
 sudo ./scripts/foxhunt-rssi.sh --targets targets.txt
 ```
+
+### 3c) Normalized observations and live alerting
+
+The capture-then-analyze scripts judge a log only after the run finishes. For
+live alerting, for combining several sensors, and as the shared shape a future
+Wi-Fi frontend will reuse, captures can be emitted as normalized JSON Lines,
+one object per advertising report, stamped with which sensor saw it:
+
+```bash
+# Alert on spam live. Runs until Ctrl+C; give a duration in seconds to bound it.
+sudo ./scripts/ble-live-watch.sh
+sudo ./scripts/ble-live-watch.sh hci0 120 aggressive
+
+# Convert a finished capture to a normalized stream.
+./scripts/ble-observe.py --input logs/capture.log --out logs/obs.jsonl
+```
+
+`ble-live-watch.sh` enables an LE scan on the radio for the run (btmon alone
+records nothing on an idle adapter), line-buffers btmon so each advert reaches
+the detector as it lands, and leaves two artifacts behind: the `.btsnoop`
+trace and `logs/obs-<iface>-<timestamp>.jsonl`, one record per advert with
+absolute timestamps. `ble-field-run.sh` writes the same `obs-*.jsonl` beside
+its summary, so every capture already produces the file a collector or SIEM
+ingests.
+
+The live alerter runs the *same* detector as the batch scanner over a sliding
+window, so a threshold tuned in `config/signatures.conf` changes both. Set
+`SENSOR_ID`, and optionally `SENSOR_LAT`/`SENSOR_LON`, in
+`config/interfaces.conf` so every observation is attributable to a sensor;
+the observer reads them from there, and the environment overrides the file.
+
+Under the hood the wrapper runs this pipeline, which you can assemble yourself
+if you need to (the LE scan is the part that is easy to forget):
+
+```bash
+sudo stdbuf -oL btmon -i hci0 \
+  | ./scripts/ble-observe.py --stream --epoch-base now \
+  | ./scripts/ble-live-alert.py --window 30 --interval 5 --profile balanced
+```
+
+See [docs/sensor-net-notes.md](docs/sensor-net-notes.md) for the `ble-obs/1`
+schema and how this becomes the foundation for a triangulating sensor net,
+and [docs/siem-ingestion.md](docs/siem-ingestion.md) for the `ble-alert/1`
+record the live watcher writes and how to ship both files to a SIEM.
+
+### 3d) Wi-Fi: deauth floods, fake APs, evil twins, KARMA responders
+
+The same shape for 802.11, passive only:
+
+```bash
+sudo ./scripts/wifi-capture.sh wlan1 60                   # capture + field extract to logs/
+python3 scripts/wifi-signature-scan.py --input logs/wifi-wlan1-<stamp>.tsv
+sudo ./scripts/wifi-live-watch.sh wlan1                   # live alerts, wifi-obs/1 + wifi-alert/1 records
+```
+
+`wifi-fingerprint.py` identifies senders across MAC rotation by what their
+frames reveal about the hardware (tag order, rates, capabilities, vendor
+OUIs), keeps a sighting history, takes the same watchlist, and collapses
+a beacon flood's invented BSSIDs into one "same tool" identity:
+
+```bash
+./scripts/wifi-fingerprint.py --input logs/wifi-wlan1-<stamp>.tsv --watchlist config/watchlist.conf
+```
+
+Set `WIFI_IFACE` (on the uConsole + AC1200 usually `wlan1`) and the hop list
+in `config/interfaces.conf`. The wrappers put the adapter in monitor mode,
+hop channels, and restore it on exit. Records carry the same envelope as the
+BLE ones, so the collector, publisher and SIEM path handle both. Families,
+caveats and what must be verified on hardware are in
+[docs/wifi-notes.md](docs/wifi-notes.md). None of the Wi-Fi thresholds have
+been baselined on a real venue yet.
+
+### 3e) Sensor net: several nodes, one collector
+
+Set `MQTT_HOST` (and the rest of the `MQTT_*` keys) in
+`config/interfaces.conf` and `ble-live-watch.sh` ships every observation and
+alert record to the broker as it is written, with a retained heartbeat. On
+the machine that watches the fleet:
+
+```bash
+./scripts/ble-collector.py --mqtt --state logs/fleet-state.json --alerts-out logs/fleet-alerts.jsonl
+```
+
+The collector merges devices across sensors by identity, judges every
+sensor's recent window with the same detector, estimates where a
+`strong`/`session` device or a flood is, with the error bar stated, and
+groups a run of alerts into one `fleet-incident/1` record
+(`--incidents-out`) so a SOC gets one ticket per flood. To hand an
+incident to venue security or law enforcement:
+
+```bash
+./scripts/evidence-bundle.sh --incident logs/fleet-incidents.jsonl        # latest incident
+./scripts/evidence-bundle.sh --from "2026-09-19 14:00" --to "2026-09-19 14:20"
+```
+
+The bundle holds the records inside that window (plus a margin), the
+traces whose run overlapped it, a summary, and a sha256 manifest, and
+nothing about the rest of the day. Nodes
+that cannot reach a broker drop files into a directory it watches instead
+(`--watch DIR`), and finished captures can be merged after the fact
+(`--input logs/obs-*.jsonl`). The node contract, including an ESP32
+reference sketch, is in [docs/sensor-nodes.md](docs/sensor-nodes.md).
+
+### 3f) Fixed sensor or collector as a service
+
+`systemd/` carries units for a box that runs unattended: a per-adapter
+sensor (`skid-finder-sensor@hci0`), the collector, and a nightly retention
+sweep that removes observations, captures and traces older than three
+days while keeping alerts, incidents and state. Install and drop-in
+examples, including running the sensor without root, are in
+[docs/fixed-sensor.md](docs/fixed-sensor.md).
 
 ### 4) Dual-pane session
 
@@ -327,7 +617,8 @@ sudo ./scripts/ble-field-run.sh
 ```
 
 Outputs:
-- `logs/btmon-<iface>-<timestamp>.log`
+- `logs/btmon-<iface>-<timestamp>.log` and `.btsnoop`
+- `logs/obs-<iface>-<timestamp>.jsonl` (normalized observations, see 3c)
 - `logs/summary-<iface>-<timestamp>.txt`
 
 The summary now includes a signature scan section based on the captured `btmon` log.
@@ -360,13 +651,24 @@ Run the full local validation suite before a field session:
 ./tests/test-toolkit.sh
 ```
 
-This checks shell syntax for the toolkit scripts, runs `shellcheck` when it is installed, confirms the example config files exist, exercises the signature and GPS-merge regression tests, verifies the capture pipeline survives its own timeout, and writes a timestamped report under `logs/`.
+This checks shell syntax for the toolkit scripts, runs `shellcheck` and `ruff` when they are installed, confirms the example config files exist, exercises the signature, fingerprint, GPS-merge, normalized-observation, live-watch and field-menu regression tests, measures detector false-positive rate and recall against the labeled corpus, verifies the capture pipeline survives its own timeout, and writes a timestamped report under `logs/`.
 
-The same suite runs in CI on every push and pull request. To match CI locally, install `shellcheck`:
+The same suite runs in CI on every push and pull request, on Python 3.11
+(Raspberry Pi OS bookworm, the uConsole) and 3.13 (Debian 13, Parrot,
+Ubuntu 26.04). To match CI locally, install `shellcheck`:
 
 ```bash
 sudo apt install -y shellcheck
 ```
+
+CI and security scanning are called from
+[git-your-ship-together](https://github.com/ChiefGyk3D/git-your-ship-together)'s
+reusable workflows, pinned by commit. Branch protection on `main` requires
+these checks:
+
+- `ci / CI green` (ruff and the test suite on Python 3.11 and 3.13)
+- `shell / CI green` (shellcheck and shfmt over every shell script)
+- `security / CodeQL` and `security / Secret scan (gitleaks)` (the security workflow has no gate job of its own; Semgrep, dependency review and Scorecard report without being required)
 
 ## How scanning works
 
@@ -482,14 +784,6 @@ mkdir -p ~/field-archives
 tar -czf ~/field-archives/ble-$(date +%Y%m%d-%H%M%S).tgz logs/
 ```
 
-## Git Initialization
-
-```bash
-git init
-git add .
-git commit -m "Initial Skid Finder BLE spam detector and foxhunt toolkit"
-```
-
 ## Troubleshooting
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for adapter detection, `hci1` local-name errors, package install issues, and single-adapter fallback workflows.
@@ -522,45 +816,53 @@ MediaTek AC1200-specific diagnostic report:
 ## Known Limitations and Roadmap
 
 Open work, kept here rather than in a tracker so the caveats travel with the
-tool.
+tool. The stage each item is at is in the Status section above; the
+milestone view of the same list is [docs/ROADMAP.md](docs/ROADMAP.md),
+and what comes after 1.0 (Wi-Fi fingerprinting and foxhunting, LoRa and
+Meshtastic, 802.15.4, sub-GHz, cellular, GNSS, spectrum watch, and the
+enterprise operations layer) is in
+[docs/post-1.0-direction.md](docs/post-1.0-direction.md).
 
-### Detector thresholds are not yet baselined against quiet RF (planned)
+### Detector thresholds are measured, but not yet against real quiet RF
 
-Every threshold in `scripts/ble-signature-scan.py` was measured during Hacker
-Summer Camp 2026, on the BSidesLV floor at the Tuscany. That environment is
-both far denser than normal and genuinely full of BLE spam, so a clean ambient
-sample was never available while the numbers were being set. The thresholds
-are workable and they no longer fire on ordinary conference traffic, but
-"does not fire in a hostile environment" is a weaker claim than "fires only on
-hostile traffic". Both directions still need confirming somewhere quiet.
+Every threshold in the detector was set during Hacker Summer Camp 2026, on the
+BSidesLV floor at the Tuscany. That environment is both far denser than normal
+and genuinely full of BLE spam, so a clean ambient sample was never available
+while the numbers were being set. The thresholds are workable and they no
+longer fire on ordinary conference traffic, but "does not fire in a hostile
+environment" is a weaker claim than "fires only on hostile traffic".
 
-The scanner prints a note to stderr whenever it falls back to built-in
-thresholds, for exactly this reason.
+What now exists to close this:
 
-Planned follow-up, after the conference week:
+- A labeled corpus and a metrics harness, `tests/test-detector-metrics.py`,
+  which runs the detector across every sample for every profile and reports
+  false-positive rate and recall. It fails the build if ambient traffic
+  matches anything or spam recall drops. This is a regression guard, not just a
+  report, and it runs in CI.
+- A committed slot for **your own real captures** under `tests/corpus/real/`
+  (git-ignored for privacy and size). Record one with
+  `scripts/add-corpus-sample.sh --label ambient --capture <log> --run` and the
+  same harness measures the detector against real quiet RF instead of only
+  synthetic traffic. See `tests/corpus/real/README.md`.
+- The recall side needs real hostile traffic, which a quiet baseline cannot
+  provide. To produce one safely, capture your own Flipper Zero's BLE spam in a
+  contained environment and record it with `--label spam`. See
+  [docs/flipper-spam-capture.md](docs/flipper-spam-capture.md).
 
-1. Capture 20-30s of ordinary ambient traffic somewhere quiet.
-2. Confirm the scan produces no match. Raise any threshold that trips.
-3. Re-run the retained conference captures to confirm the adjustment did not
-   simply blind the detector.
-4. Record both baselines so future tuning has a fixed reference.
+The remaining gap is the one only hardware can close: capturing that real quiet
+baseline. Until you have, the scanner still prints a stderr note whenever it
+uses built-in thresholds, and a match is a lead worth investigating rather than
+a verdict. Prefer your own `config/signatures.conf` over the shipped defaults
+once you have measured your environment.
 
-Until then, treat a match as a lead worth investigating rather than a verdict,
-and prefer your own `config/signatures.conf` over the shipped defaults once you
-have measured your environment.
+### The field menu has not been used on the uConsole yet
 
-### Everything is driven from the command line (planned TUI)
-
-Setup and operation currently mean remembering script names, argument order,
-and which interface to pass. That is a poor fit for the uConsole, which is
-often used one-handed, standing up, on a small screen. A menu-driven front end
-is planned to cover adapter selection, setup, the field run, spam watch, and
-foxhunt, so the common paths do not have to be typed from memory.
-
-The likely approach is `whiptail` or `dialog`, which are already present on
-Raspberry Pi OS and add no runtime dependency, rather than a Python `curses`
-application. The scripts stay the interface underneath either way; the menu
-would only build the command line, so nothing becomes menu-only.
+`scripts/skid-finder.sh` covers setup, adapter mode, health and recovery, the
+sweep, field run, capture, foxhunt, fingerprinting and signature scans. Its
+command building is tested (`tests/test-field-menu.sh`), but the `whiptail`
+screens have only been exercised on a laptop. Sizing and flow on the uConsole's
+1280x480 display are unverified; if a dialog is cut off or a prompt is in the
+wrong order, that is a bug worth reporting with the screen size.
 
 ### Other open items
 
@@ -570,21 +872,77 @@ would only build the command line, so nothing becomes menu-only.
   and timing, which is not implemented.
 - Signature coverage targets common scripted spam. Custom payloads are not
   exhaustively covered.
-- Only the shell code is linted in CI. The Python is exercised by the test
-  suite but not statically checked.
+
+### Sensor net (alpha: collector and transport exist, unproven on real nodes)
+
+`scripts/ble-collector.py` merges records from several sensors over MQTT or
+a watched directory, judges each sensor with the shared detector, and
+estimates location as an RSSI-weighted centroid with its error stated. The
+publisher and collector are tested against a stand-in broker in CI; neither
+has been run against a real broker or a second physical node from this
+project yet. The ESP32 reference sketch compiles (arduino-cli, ESP32 core
+3.3.12, 2026-09-18) but has not run on a board.
+
+The honest caveat, recorded in [docs/sensor-net-notes.md](docs/sensor-net-notes.md):
+RSSI-based location indoors is coarse (multipath swings readings by 20 dB), and
+you can only locate an identity that persists across sensors — a `strong`
+or `session` tier device, or a spam source that transmits continuously. A
+`model`/`ambiguous` tier target is a product, possibly several people, and
+the collector refuses to place it on a map. Multilateration with a
+calibrated path-loss model is not implemented.
+
+### SIEM and dashboards (records and incidents exist, shipper untested)
+
+Live runs write `logs/alerts-<iface>-<stamp>.jsonl`, one `ble-alert/1`
+record per detector evaluation, beside the `ble-obs/1` observation file, and
+the collector writes `fleet-incident/1` records. All are JSON Lines a log
+shipper can pick up as-is. The record shapes and the
+intended Wazuh/OpenSearch path are in
+[docs/siem-ingestion.md](docs/siem-ingestion.md); no shipper configuration has
+been exercised end to end from this toolkit yet, and there is no dashboard.
+
+### Wi-Fi attack detection (alpha: synthetic-only thresholds, unrun on the AC1200)
+
+`scripts/wifi-capture.sh`, `wifi-live-watch.sh`, `wifi-observe.py`,
+`wifi-signature-scan.py` and `wifi-live-alert.py` detect deauth/disassoc
+floods, beacon floods, evil twins and KARMA-style responders from a
+monitor-mode capture and emit `wifi-obs/1` / `wifi-alert/1` records the
+collector and publisher already carry. The thresholds are measured against
+synthetic traffic only; the capture path has not been run on the MT7921
+under the AIO v2 kernel from this project; and two tshark field
+representations are handled by heuristic (see docs/wifi-notes.md).
+Fingerprinting of randomised clients exists but is measured on synthetic
+traffic only; a real capture across one phone's MAC rotations is the check.
+Passive only: detection, never transmit.
+
+### Tooling
+
+Both the shell and the Python are now statically checked in CI: `shellcheck`
+for the scripts, `ruff` for the Python (ruleset in `ruff.toml`). The detector's
+behaviour is additionally measured, not just exercised, by
+`tests/test-detector-metrics.py`.
+
+## Data handling
+
+Records contain other people's device addresses and advertised names.
+[docs/data-handling.md](docs/data-handling.md) says what is collected, what
+it is for and not for, how long to keep it, who should see it, and what to
+tell a venue or an employer before a sensor runs. Security reports go by
+[SECURITY.md](SECURITY.md).
 
 ## Contributing
 
-Testing on additional hardware is especially welcome. When reporting an issue,
-include the output of:
+See [CONTRIBUTING.md](CONTRIBUTING.md). Testing on additional hardware is
+especially welcome. When reporting an issue, include the output of:
 
 ```bash
 ./scripts/troubleshoot-bluetooth.sh
 ./tests/test-toolkit.sh
 ```
 
-Please run `shellcheck -S warning -x scripts/*.sh tests/*.sh` before opening a
-pull request; CI enforces the same check.
+Please run `shellcheck -S warning -x scripts/*.sh tests/*.sh` and
+`ruff check scripts/*.py tests/*.py` before opening a pull request; CI enforces
+both.
 
 ## License
 

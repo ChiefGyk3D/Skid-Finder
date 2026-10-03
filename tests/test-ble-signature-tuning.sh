@@ -113,7 +113,7 @@ import configparser, importlib.util, sys, os
 
 root = sys.argv[1]
 spec = importlib.util.spec_from_file_location(
-    "sig", os.path.join(root, "scripts", "ble-signature-scan.py")
+    "sig", os.path.join(root, "scripts", "ble_signatures.py")
 )
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)

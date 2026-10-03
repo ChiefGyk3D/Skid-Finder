@@ -16,15 +16,26 @@ def rand_mac(rng: random.Random) -> str:
     return ":".join(f"{rng.randint(0, 255):02X}" for _ in range(6))
 
 
+FORMAT = "btmon"
+
+
 def emit(handle, timestamp: float, addr: str, addr_type: str, rssi: int,
          name: str = "", company: str = "", company_id: int = 0,
          service_uuid: str = "", addr_class: str = "Resolvable") -> None:
+    if FORMAT == "tshark":
+        emit_tshark(handle, timestamp, addr, addr_type, rssi, name, company_id,
+                    service_uuid, addr_class, company)
+        return
     handle.write(f"> HCI Event: LE Meta Event (0x3e) plen 43 {' ' * 20}#1 {timestamp:.6f}\n")
     handle.write("      LE Extended Advertising Report (0x0d)\n")
     handle.write("        Num reports: 1\n")
     handle.write("        Entry 0\n")
     handle.write("          Event type: 0x0013\n")
     handle.write("          Legacy PDU Type: ADV_IND (0x0013)\n")
+    if addr_type.lower() == "public" and addr_class in ("Resolvable", "Non-Resolvable", "Static"):
+        # btmon annotates a public address with its OUI, never with a
+        # random-address class; a fixture must not print the impossible.
+        addr_class = "OUI " + addr[0:8].replace(":", "-")
     handle.write(f"          Address type: {addr_type} (0x01)\n")
     handle.write(f"          Address: {addr} ({addr_class})\n")
     handle.write("          Primary PHY: LE 1M\n")
@@ -38,6 +49,43 @@ def emit(handle, timestamp: float, addr: str, addr_type: str, rssi: int,
         handle.write(f"          Company: {company} ({company_id})\n")
     if service_uuid:
         handle.write(f"          Service Data: {service_uuid}\n")
+
+
+def emit_tshark(handle, timestamp, addr, addr_type, rssi, name, company_id,
+                service_uuid, addr_class, company="") -> None:
+    """The same advertisement as tshark -T fields prints it (ble_parse.TSHARK_FIELDS).
+
+    The address class lives in the address bits on this path, so the top
+    two bits of the first byte are rewritten to match addr_class.
+    """
+    if addr_type.lower() == "public" or addr_class.startswith("OUI") or addr_class not in (
+            "Resolvable", "Non-Resolvable", "Static"):
+        # A public address is printed as-is; only random ones carry their
+        # class in the top two bits.
+        peer_type = "0x00"
+        addr = addr.lower()
+    else:
+        peer_type = "0x01"
+        first = (int(addr[0:2], 16) & 0x3F) | {"Static": 0xC0, "Resolvable": 0x40, "Non-Resolvable": 0x00}[addr_class]
+        addr = f"{first:02x}" + addr[2:].lower()
+    uuid = ""
+    types = ["0x01"]
+    if service_uuid:
+        uuid = "0xfe2c" if "fe2c" in service_uuid.lower() else "0x180f"
+        types.append("0x16")
+    # btmon's emitter prints a Company line only when a name is given; the
+    # id alone must not conjure a vendor the other spelling does not have.
+    if not company:
+        company_id = 0
+    if company_id:
+        types.append("0xff")
+    if name:
+        types.append("0x09")
+    handle.write("\t".join([
+        f"{1758400000 + timestamp:.6f}", "0x0d", addr, peer_type, str(rssi), name,
+        f"0x{company_id:04x}" if company_id else "", uuid, ",".join(types),
+        "0x0013", "", "24",   # same event type and data length btmon's fixture prints
+    ]) + "\n")
 
 
 def gen_ambient(handle, duration: float, rng: random.Random,
@@ -130,8 +178,12 @@ def main() -> int:
                         help="advertisements per second (default: mode-specific)")
     parser.add_argument("--seed", type=int, default=1337)
     parser.add_argument("--output", default="-")
+    parser.add_argument("--format", default="btmon", choices=["btmon", "tshark"],
+                        help="btmon text (default) or tshark field lines")
     args = parser.parse_args()
 
+    global FORMAT
+    FORMAT = args.format
     rng = random.Random(args.seed)
     handle = sys.stdout if args.output == "-" else open(args.output, "w", encoding="utf-8")
     generator = {"ambient": gen_ambient, "spam": gen_spam,

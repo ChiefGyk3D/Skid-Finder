@@ -146,6 +146,35 @@ If you are using the AC1200 USB-C Wi-Fi card, run:
 
 This collects USB inventory, controller visibility, rfkill state, module load info, and relevant Bluetooth/MediaTek dmesg lines into a log file under `logs/`.
 
+## Capturing without root
+
+Symptom:
+- `Run as root (sudo).` from a capture script on a laptop, or `btmon` says `Failed to bind channel: Operation not permitted`
+
+Fix:
+- `sudo usermod -aG wireshark "$USER"`, log out and in, confirm with `id -nG | grep wireshark` and `tshark -D | grep bluetooth-monitor`. The capture scripts then record through tshark and render with `btmon -r`; nothing else changes.
+- If `tshark -D` lists nothing, dumpcap is not setuid or capability-enabled: `sudo dpkg-reconfigure wireshark-common` and answer yes to non-root capture.
+- Live alerting works the same way (tshark streams the reports as fields). Wi-Fi monitor mode is root-only regardless.
+
+## Wi-Fi monitor mode
+
+Symptom:
+- `wifi-capture.sh` or `wifi-live-watch.sh` reports no frames, or `iw ... set type monitor` fails
+
+Checks:
+
+```bash
+iw list | grep -A8 'Supported interface modes'   # must list 'monitor'
+iw dev                                           # the interface name and its current type
+nmcli device status                              # is NetworkManager holding it?
+```
+
+Fixes:
+- Use the MT7921 (AC1200) side, usually `wlan1`; the CM4's own radio may not offer monitor mode.
+- If `wpa_supplicant` keeps re-taking the interface, stop it for the run: `systemctl stop wpa_supplicant`, and restore afterwards. The wrapper already handles NetworkManager.
+- Confirm tshark can open the interface as your user is root: `tshark -D` should list it.
+- A capture with frames but no `wlan_radio.signal_dbm` means radiotap headers are missing; the detector still works, RSSI is just blank.
+
 ## Signature scan for common scripted spam
 
 Run against any btmon capture:

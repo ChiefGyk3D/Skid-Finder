@@ -21,7 +21,7 @@ Two details of real btmon output drive the design:
 
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, Iterator, List, Optional
 
 
 MAC_RE = re.compile(r"(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}")
@@ -101,7 +101,14 @@ class AdRecord:
     flags: str = ""
     data_length: Optional[int] = None
     companies: List[str] = field(default_factory=list)
+    # Bluetooth SIG company identifiers as '0x004c'. btmon prints the name
+    # and the number; tshark prints only the number. Identity keys are built
+    # from these so both capture paths file a device under the same key.
+    company_ids: List[str] = field(default_factory=list)
     service_uuids: List[str] = field(default_factory=list)
+    # Set by consumers that already know the identity key (the collector,
+    # from the observation record); None means "derive it".
+    identity_key: Optional[str] = None
 
     @property
     def is_random(self) -> bool:
@@ -121,127 +128,307 @@ class AdRecord:
         return self.addr_class == "public" or self.addr_type == "public"
 
 
-def _finish(record: Optional[AdRecord], out: List[AdRecord]) -> None:
-    if record is not None and record.address:
-        out.append(record)
+def iter_records(lines: Iterable[str]) -> Iterator[AdRecord]:
+    """Yield advertising records from an iterable of btmon text lines.
 
+    This is the streaming heart of the parser. It emits each record the moment
+    the block that follows it makes clear the record is complete, so it works
+    identically whether the lines come from a file read all at once or from a
+    live 'btmon' pipe delivered one line at a time. parse_records() is just this
+    generator drained into a list.
 
-def parse_records(path: str) -> List[AdRecord]:
-    """Parse a btmon text log into advertising records.
-
-    Only HCI advertising reports are returned. MGMT 'Device Found' echoes of
-    the same advertisement are skipped so events are not counted twice.
+    Only HCI advertising reports are yielded. MGMT 'Device Found' echoes of the
+    same advertisement are skipped so events are not counted twice.
     """
-    records: List[AdRecord] = []
     current: Optional[AdRecord] = None
     in_adv_block = False
     block_time: Optional[float] = None
 
-    with open(path, "r", encoding="utf-8", errors="ignore") as handle:
-        for raw in handle:
-            line = raw.rstrip("\n")
+    for raw in lines:
+        line = raw.rstrip("\n")
 
-            if BLOCK_RE.match(line):
-                # A new top-level event ends whatever came before.
-                _finish(current, records)
-                current = None
+        if BLOCK_RE.match(line):
+            # A new top-level event ends whatever came before.
+            if current is not None and current.address:
+                yield current
+            current = None
 
-                # Only HCI events carry advertising reports we want to count.
-                # '@' is the management channel, which duplicates them.
-                in_adv_block = line.startswith(">")
-                time_match = TIME_RE.search(line)
-                block_time = float(time_match.group(1)) if time_match else None
-                continue
+            # Only HCI events carry advertising reports we want to count.
+            # '@' is the management channel, which duplicates them.
+            in_adv_block = line.startswith(">")
+            time_match = TIME_RE.search(line)
+            block_time = float(time_match.group(1)) if time_match else None
+            continue
 
-            if not in_adv_block:
-                continue
+        if not in_adv_block:
+            continue
 
-            if ADV_REPORT_RE.search(line):
-                _finish(current, records)
-                current = None
-                continue
+        if ADV_REPORT_RE.search(line):
+            if current is not None and current.address:
+                yield current
+            current = None
+            continue
 
-            # 'Entry N' starts a new report inside a multi-report event.
-            if re.match(r"^\s*Entry \d+\s*$", line):
-                _finish(current, records)
-                current = AdRecord(timestamp=block_time)
-                continue
+        # 'Entry N' starts a new report inside a multi-report event.
+        if re.match(r"^\s*Entry \d+\s*$", line):
+            if current is not None and current.address:
+                yield current
+            current = AdRecord(timestamp=block_time)
+            continue
 
-            addr_match = ADDRESS_RE.match(line)
-            if addr_match:
-                # 'Direct address:' is the scan target, not the advertiser, and
-                # is excluded by the regex requiring 'Address:' with a capital A.
-                if current is None:
-                    current = AdRecord(timestamp=block_time)
-                if not current.address:
-                    current.address = addr_match.group(1).upper()
-                    current.addr_class = classify_address(addr_match.group(2))
-                continue
-
+        addr_match = ADDRESS_RE.match(line)
+        if addr_match:
+            # 'Direct address:' is the scan target, not the advertiser, and
+            # is excluded by the regex requiring 'Address:' with a capital A.
             if current is None:
-                continue
+                current = AdRecord(timestamp=block_time)
+            if not current.address:
+                current.address = addr_match.group(1).upper()
+                current.addr_class = classify_address(addr_match.group(2))
+            continue
 
-            type_match = ADDR_TYPE_RE.match(line)
-            if type_match:
-                current.addr_type = type_match.group(1).strip().lower()
-                continue
+        if current is None:
+            continue
 
-            rssi_match = RSSI_RE.match(line)
-            if rssi_match:
-                current.rssi = int(rssi_match.group(1))
-                continue
+        type_match = ADDR_TYPE_RE.match(line)
+        if type_match:
+            current.addr_type = type_match.group(1).strip().lower()
+            continue
 
-            tx_match = TXPOWER_RE.match(line)
-            if tx_match:
-                value = int(tx_match.group(1))
-                # 127 is the 'not available' sentinel in the LE spec.
-                current.tx_power = None if value == 127 else value
-                continue
+        rssi_match = RSSI_RE.match(line)
+        if rssi_match:
+            current.rssi = int(rssi_match.group(1))
+            continue
 
-            name_match = NAME_RE.match(line)
-            if name_match:
-                current.name = name_match.group(1).strip()
-                continue
+        tx_match = TXPOWER_RE.match(line)
+        if tx_match:
+            value = int(tx_match.group(1))
+            # 127 is the 'not available' sentinel in the LE spec.
+            current.tx_power = None if value == 127 else value
+            continue
 
-            company_match = COMPANY_RE.match(line)
-            if company_match:
-                current.companies.append(company_match.group(1).strip().lower())
-                continue
+        name_match = NAME_RE.match(line)
+        if name_match:
+            current.name = name_match.group(1).strip()
+            continue
 
-            manuf_match = MANUF_RE.match(line)
-            if manuf_match:
-                vendor = manuf_match.group(1).strip().lower()
-                if vendor:
-                    current.companies.append(vendor)
-                continue
+        company_match = COMPANY_RE.match(line)
+        if company_match:
+            current.companies.append(company_match.group(1).strip().lower())
+            current.company_ids.append(f"0x{int(company_match.group(2)):04x}")
+            continue
 
-            svc_match = SERVICE_DATA_RE.match(line)
-            if svc_match:
-                current.service_uuids.append(svc_match.group(1).lower())
-                continue
+        manuf_match = MANUF_RE.match(line)
+        if manuf_match:
+            vendor = manuf_match.group(1).strip().lower()
+            if vendor:
+                current.companies.append(vendor)
+            continue
 
-            if UUID_RE.match(line):
-                for uuid in UUID_VALUE_RE.findall(line):
-                    current.service_uuids.append(uuid.lower())
-                continue
+        svc_match = SERVICE_DATA_RE.match(line)
+        if svc_match:
+            current.service_uuids.append(svc_match.group(1).lower())
+            continue
 
-            flags_match = FLAGS_RE.match(line)
-            if flags_match:
-                current.flags = flags_match.group(1).lower()
-                continue
+        if UUID_RE.match(line):
+            for uuid in UUID_VALUE_RE.findall(line):
+                current.service_uuids.append(uuid.lower())
+            continue
 
-            len_match = DATA_LEN_RE.match(line)
-            if len_match:
-                current.data_length = int(len_match.group(1))
-                continue
+        flags_match = FLAGS_RE.match(line)
+        if flags_match:
+            current.flags = flags_match.group(1).lower()
+            continue
 
-            pdu_match = PDU_RE.match(line)
-            if pdu_match and not current.pdu_type:
-                current.pdu_type = pdu_match.group(1).strip()
-                continue
+        len_match = DATA_LEN_RE.match(line)
+        if len_match:
+            current.data_length = int(len_match.group(1))
+            continue
 
-    _finish(current, records)
-    return records
+        pdu_match = PDU_RE.match(line)
+        if pdu_match:
+            # Normalise to the PDU name so the tshark path, which only has
+            # the event type, produces the same value. 'Legacy PDU Type:
+            # ADV_IND (0x0013)' wins over an earlier 'Event type: 0x0013'.
+            value = pdu_match.group(1).strip()
+            if line.lstrip().startswith("Legacy PDU Type"):
+                current.pdu_type = value.split(" (")[0].strip()
+            elif not current.pdu_type:
+                current.pdu_type = LEGACY_PDU_BY_EVENT_TYPE.get(value.lower(), value)
+            continue
+
+    if current is not None and current.address:
+        yield current
+
+
+# --- tshark field format ----------------------------------------------------
+#
+# A second way to get advertising reports, for hosts where btmon cannot be
+# run as root: tshark on the 'bluetooth-monitor' interface (open to members
+# of the wireshark group) with exactly these fields, tab separated, all
+# occurrences joined by commas. scripts/lib.sh asks for the same list; keep
+# the two in step. Measured on Wireshark 4.x, 2026-09-18.
+TSHARK_FIELDS = [
+    "frame.time_epoch",
+    "bthci_evt.le_meta_subevent",
+    "bthci_evt.bd_addr",
+    "bthci_evt.le_peer_address_type",
+    "bthci_evt.rssi",
+    "btcommon.eir_ad.entry.device_name",
+    "btcommon.eir_ad.entry.company_id",
+    "btcommon.eir_ad.entry.uuid_16",
+    "btcommon.eir_ad.entry.type",
+    "bthci_evt.le_ext_advts_event_type",
+    "bthci_evt.le_advts_event_type",
+    "bthci_evt.data_length",
+]
+# Only LE Advertising Report (0x02) and LE Extended Advertising Report (0x0d).
+TSHARK_FILTER = "bthci_evt.le_meta_subevent == 0x02 || bthci_evt.le_meta_subevent == 0x0d"
+
+
+def _split_list(text: str) -> List[str]:
+    return [t.strip() for t in text.split(",") if t.strip()]
+
+
+# The SIG names btmon prints for the vendors that dominate a conference
+# floor, so the tshark path can label them the same way. Anything else is
+# reported by id alone; the identity key never depends on the name.
+COMPANY_NAMES = {
+    "0x0002": "intel corp.",
+    "0x0006": "microsoft",
+    "0x004c": "apple, inc.",
+    "0x0059": "nordic semiconductor asa",
+    "0x0075": "samsung electronics co. ltd.",
+    "0x0087": "garmin international, inc.",
+    "0x009e": "bose corporation",
+    "0x00e0": "google",
+    "0x012d": "sony corporation",
+    "0x0171": "amazon.com services llc",
+    "0x0224": "fitbit, inc.",
+    "0x027d": "huawei technologies co., ltd.",
+    "0x038f": "xiaomi inc.",
+}
+
+# Extended advertising report event types for legacy PDUs, as the LE
+# Extended Advertising Report encodes them, mapped to the PDU names btmon
+# prints ('Legacy PDU Type: ADV_IND (0x0013)'), so a PDU class means the
+# same thing whichever tool saw it.
+LEGACY_PDU_BY_EVENT_TYPE = {
+    "0x0013": "ADV_IND",
+    "0x0015": "ADV_DIRECT_IND",
+    "0x0012": "ADV_SCAN_IND",
+    "0x0010": "ADV_NONCONN_IND",
+    "0x001b": "SCAN_RSP",
+    "0x001a": "SCAN_RSP",
+}
+
+
+def classify_random_address(address: str) -> str:
+    """Static / resolvable / non-resolvable from the top two bits of a random address.
+
+    btmon labels these for us; tshark reports only public-vs-random, so the
+    class comes from the address itself: 11 static, 01 resolvable, 00
+    non-resolvable (Core spec vol 6 part B 1.3.2).
+    """
+    try:
+        top = int(address[0:2], 16) >> 6
+    except (ValueError, IndexError):
+        return "unknown"
+    return {3: "static", 1: "resolvable", 0: "non-resolvable"}.get(top, "unknown")
+
+
+def parse_tshark_line(line: str) -> Optional[AdRecord]:
+    line = line.rstrip("\n")
+    if not line or line.startswith("#"):
+        return None
+    parts = line.split("\t")
+    if len(parts) < 5:
+        return None
+    parts += [""] * (len(TSHARK_FIELDS) - len(parts))
+
+    addr = parts[2].strip().upper()
+    if not MAC_RE.match(addr):
+        return None
+    record = AdRecord(address=addr)
+    try:
+        record.timestamp = float(parts[0]) if parts[0].strip() else None
+    except ValueError:
+        record.timestamp = None
+
+    addr_type = parts[3].strip().lower()
+    if addr_type in ("0x00", "0", "0x02", "2"):
+        record.addr_type = "public"
+        record.addr_class = "public"
+    else:
+        record.addr_type = "random"
+        record.addr_class = classify_random_address(addr)
+
+    rssi = parts[4].strip()
+    if INT_RE.fullmatch(rssi or "x"):
+        record.rssi = int(rssi)
+
+    names = _split_list(parts[5])
+    if names:
+        record.name = names[-1]
+    # Company ids come out as hex ('0x004c'); the BLE detector's vendor
+    # regex already matches that spelling for Apple. Fingerprints computed
+    # from this path therefore differ from btmon's ('apple, inc.') for the
+    # same device, which docs/README record.
+    ids = []
+    for raw_id in _split_list(parts[6]):
+        try:
+            ids.append(f"0x{int(raw_id, 0):04x}")
+        except ValueError:
+            continue
+    record.company_ids = ids
+    record.companies = [COMPANY_NAMES.get(i, i) for i in ids]
+    # Same spelling as the btmon path ('0xfe2c'), so service data lands in
+    # the fingerprint identically.
+    uuids = []
+    for raw in _split_list(parts[7]):
+        try:
+            uuids.append(f"0x{int(raw, 0):04x}")
+        except ValueError:
+            uuids.append(raw.lower())
+    record.service_uuids = uuids
+
+    ext = parts[9].strip().lower()
+    legacy = parts[10].strip().lower()
+    if ext:
+        record.pdu_type = LEGACY_PDU_BY_EVENT_TYPE.get(ext, "ext:" + ext)
+    elif legacy:
+        record.pdu_type = {"0x00": "ADV_IND", "0x01": "ADV_DIRECT_IND", "0x02": "ADV_SCAN_IND",
+                           "0x03": "ADV_NONCONN_IND", "0x04": "SCAN_RSP"}.get(legacy, "legacy:" + legacy)
+    length = parts[11].strip()
+    if length.isdigit():
+        record.data_length = int(length)
+    types = [t.lower() for t in _split_list(parts[8])]
+    if "0x01" in types:
+        record.flags = "present"
+    return record
+
+
+def iter_tshark_records(lines: Iterable[str]) -> Iterator[AdRecord]:
+    """Yield advertising records from tshark field lines (see TSHARK_FIELDS)."""
+    for line in lines:
+        record = parse_tshark_line(line)
+        if record is not None:
+            yield record
+
+
+def parse_tshark_records(path: str) -> List[AdRecord]:
+    with open(path, "r", encoding="utf-8", errors="ignore") as handle:
+        return list(iter_tshark_records(handle))
+
+
+def parse_records(path: str) -> List[AdRecord]:
+    """Parse a btmon text log into a list of advertising records.
+
+    Thin wrapper over iter_records() so batch and streaming callers share one
+    parser and cannot disagree about what a capture contains.
+    """
+    with open(path, "r", encoding="utf-8", errors="ignore") as handle:
+        return list(iter_records(handle))
 
 
 def capture_duration(records: List[AdRecord]) -> float:

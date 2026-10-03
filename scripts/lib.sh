@@ -13,6 +13,16 @@ INTERFACES_CONF_KEYS=(
   HUNT_HCI
   SCAN_SECONDS
   ALERT_ADS_PER_ADDR
+  SENSOR_ID
+  SENSOR_LAT
+  SENSOR_LON
+  MQTT_HOST
+  MQTT_PORT
+  MQTT_TLS
+  MQTT_TOPIC_PREFIX
+  WIFI_IFACE
+  WIFI_CHANNELS
+  WIFI_DWELL_MS
 )
 
 _assign_conf_value() {
@@ -121,6 +131,48 @@ need_root() {
     echo "Run as root (sudo)." >&2
     exit 1
   fi
+}
+
+# --- Capturing without root ------------------------------------------------------
+#
+# btmon needs CAP_NET_RAW to open the HCI monitor channel, so the capture
+# scripts historically required sudo. A laptop or desktop has another way:
+# Wireshark's dumpcap carries that capability for members of the 'wireshark'
+# group and exposes the same channel as the 'bluetooth-monitor' interface.
+# tshark can record it to pcapng, editcap can rewrite that as btsnoop, and
+# btmon can render btsnoop as the text every analysis tool here reads. None
+# of that needs root. The trade-offs: the text log only exists once the
+# capture ends (so progress counts cannot be shown live), and the monitor
+# channel carries every adapter rather than one, which on a single-adapter
+# machine changes nothing.
+#
+# The live path (ble-live-watch.sh) still needs root: it streams btmon text
+# as it happens, which the pcapng round trip cannot do.
+CAPTURE_MODE="root"
+
+unprivileged_capture_available() {
+  command -v tshark >/dev/null 2>&1 || return 1
+  command -v editcap >/dev/null 2>&1 || return 1
+  command -v btmon >/dev/null 2>&1 || return 1
+  tshark -D 2>/dev/null | grep -q 'bluetooth-monitor'
+}
+
+# Root, or the unprivileged path above. Exits with the fix otherwise.
+need_capture_privileges() {
+  if [[ "${EUID}" -eq 0 ]]; then
+    CAPTURE_MODE="root"
+    return 0
+  fi
+  if unprivileged_capture_available; then
+    CAPTURE_MODE="unprivileged"
+    echo "note: not root; capturing through tshark's bluetooth-monitor interface (wireshark group)." >&2
+    return 0
+  fi
+  echo "Run as root (sudo)." >&2
+  echo "Or, on a laptop, capture without root: install tshark, add yourself to the" >&2
+  echo "'wireshark' group (sudo usermod -aG wireshark \$USER, then log in again) and" >&2
+  echo "confirm 'tshark -D' lists bluetooth-monitor. See TROUBLESHOOTING.md." >&2
+  exit 1
 }
 
 hci_exists() {
@@ -232,9 +284,11 @@ hci_address() {
   local iface="$1" addr=""
 
   if command -v btmgmt >/dev/null 2>&1; then
-    addr="$(btmgmt -i "${iface}" info 2>/dev/null \
+    # btmgmt is a bt_shell program; when it cannot do what it was asked it
+    # can sit in its event loop rather than exit, so every call is bounded.
+    addr="$(timeout 5 btmgmt -i "${iface}" info 2>/dev/null \
       | grep -oE 'addr ([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}' \
-      | head -n1 | awk '{print $2}')"
+      | head -n1 | awk '{print $2}' || true)"
   fi
 
   if [[ -z "${addr}" ]] && command -v hciconfig >/dev/null 2>&1; then
@@ -249,11 +303,14 @@ hci_address() {
 start_le_scan() {
   local iface="$1"
 
-  # Powering the radio and enabling LE are one-shot btmgmt commands; those work
-  # fine non-interactively because they exit immediately.
-  if command -v btmgmt >/dev/null 2>&1; then
-    btmgmt -i "${iface}" power on >/dev/null 2>&1 || true
-    btmgmt -i "${iface}" le on >/dev/null 2>&1 || true
+  # Powering the radio and enabling LE are privileged one-shot btmgmt
+  # commands. Only root can issue them; as an ordinary user btmgmt cannot,
+  # and has been seen to block instead of failing, so they are skipped on
+  # the unprivileged route (the adapter is already up if bluetoothd has it)
+  # and bounded even as root.
+  if [[ "${EUID}" -eq 0 ]] && command -v btmgmt >/dev/null 2>&1; then
+    timeout 5 btmgmt -i "${iface}" power on >/dev/null 2>&1 || true
+    timeout 5 btmgmt -i "${iface}" le on >/dev/null 2>&1 || true
   fi
 
   if ! command -v bluetoothctl >/dev/null 2>&1; then
@@ -321,8 +378,8 @@ stop_le_scan() {
     LE_SCAN_FIFO=""
   fi
 
-  if [[ -n "${iface}" ]] && command -v btmgmt >/dev/null 2>&1; then
-    btmgmt -i "${iface}" stop-find >/dev/null 2>&1 || true
+  if [[ -n "${iface}" && "${EUID}" -eq 0 ]] && command -v btmgmt >/dev/null 2>&1; then
+    timeout 5 btmgmt -i "${iface}" stop-find >/dev/null 2>&1 || true
   fi
 }
 
@@ -346,6 +403,11 @@ run_btmon_capture() {
   local btsnoop="${5:-}"
   local rc=0
 
+  if [[ "${CAPTURE_MODE}" == "unprivileged" ]]; then
+    run_unprivileged_capture "${duration}" "${outfile}" "${mode}" "${btsnoop}"
+    return 0
+  fi
+
   local btmon_args=(-i "${iface}")
   if [[ -n "${btsnoop}" ]]; then
     btmon_args+=(-w "${btsnoop}")
@@ -368,6 +430,51 @@ run_btmon_capture() {
       ;;
   esac
 
+  return 0
+}
+
+# The unprivileged capture: tshark records the monitor channel to pcapng,
+# editcap rewrites it as btsnoop, btmon renders the text. The btsnoop is kept
+# when a path is given (it is the same artifact the root path writes), else
+# it lives only long enough to be rendered.
+run_unprivileged_capture() {
+  local duration="$1"
+  local outfile="$2"
+  local mode="${3:-quiet}"
+  local btsnoop="${4:-}"
+  local rc=0
+
+  echo "note: the text log is rendered when the capture ends, so running counts are not shown." >&2
+  local pcap
+  pcap="$(mktemp "${TMPDIR:-/tmp}/ble-capture-XXXXXX.pcapng")"
+  local keep_snoop="${btsnoop}"
+  if [[ -z "${keep_snoop}" ]]; then
+    keep_snoop="$(mktemp "${TMPDIR:-/tmp}/ble-capture-XXXXXX.btsnoop")"
+  fi
+
+  tshark -i bluetooth-monitor -a "duration:${duration}" -q -w "${pcap}" 2>/dev/null || rc=$?
+  case "${rc}" in
+    0|124|130|143) ;;
+    *)
+      echo "warn: tshark capture exited with status ${rc}; results may be incomplete." >&2
+      ;;
+  esac
+
+  if [[ -s "${pcap}" ]] && editcap -F btsnoop "${pcap}" "${keep_snoop}" 2>/dev/null; then
+    if [[ "${mode}" == "tee" ]]; then
+      btmon -r "${keep_snoop}" 2>/dev/null | tee "${outfile}"
+    else
+      btmon -r "${keep_snoop}" >"${outfile}" 2>/dev/null
+    fi
+  else
+    : >"${outfile}"
+    echo "warn: the unprivileged capture produced nothing to render." >&2
+  fi
+
+  rm -f "${pcap}"
+  if [[ -z "${btsnoop}" ]]; then
+    rm -f "${keep_snoop}"
+  fi
   return 0
 }
 
@@ -419,6 +526,14 @@ start_capture_progress() {
       elapsed=$(( elapsed + interval ))
       (( elapsed > duration )) && elapsed="${duration}"
 
+      # Without root the text log is rendered after the capture, so there is
+      # nothing to count yet and silence is not a fault.
+      if [[ "${CAPTURE_MODE}" == "unprivileged" ]]; then
+        printf 'capturing %ss/%ss  (unprivileged: counts appear when the capture ends)\n' \
+          "${elapsed}" "${duration}"
+        continue
+      fi
+
       events=0
       addrs=0
       if [[ -s "${logfile}" ]]; then
@@ -459,4 +574,273 @@ stop_capture_progress() {
   kill "${CAPTURE_PROGRESS_PID}" 2>/dev/null || true
   wait "${CAPTURE_PROGRESS_PID}" 2>/dev/null || true
   CAPTURE_PROGRESS_PID=""
+}
+
+# Live pipeline: btmon -> ble-observe.py --stream -> ble-live-alert.py.
+#
+# The documented "sudo btmon | ble-observe | ble-live-alert" one-liner has two
+# field failures that this helper exists to remove. First, btmon alone records
+# nothing on an idle adapter, exactly as for the batch captures, so the caller
+# must hold an LE scan open around it. Second, btmon block-buffers its stdout
+# when it is a pipe, so in a quiet room an alert could sit in a 4 KB buffer
+# for minutes; 'stdbuf -oL' makes every advert reach the detector as it lands.
+#
+# The normalized stream is tee'd to <obs_out> so the run leaves a machine-
+# readable artifact (one JSON object per advert) beside the btsnoop trace.
+# Pass /dev/null to discard it. A <duration> of 0 runs until interrupted.
+#
+# Usage: run_live_pipeline <iface> <duration> <trace|""> <obs_out> \
+#            [observe args...] -- [alert args...]
+# tshark field list for the unprivileged live path. Keep in step with
+# scripts/ble_parse.py TSHARK_FIELDS and TSHARK_FILTER.
+BLE_TSHARK_FIELDS=(
+  -e frame.time_epoch
+  -e bthci_evt.le_meta_subevent
+  -e bthci_evt.bd_addr
+  -e bthci_evt.le_peer_address_type
+  -e bthci_evt.rssi
+  -e btcommon.eir_ad.entry.device_name
+  -e btcommon.eir_ad.entry.company_id
+  -e btcommon.eir_ad.entry.uuid_16
+  -e btcommon.eir_ad.entry.type
+  -e bthci_evt.le_ext_advts_event_type
+  -e bthci_evt.le_advts_event_type
+  -e bthci_evt.data_length
+)
+BLE_TSHARK_FILTER="bthci_evt.le_meta_subevent == 0x02 || bthci_evt.le_meta_subevent == 0x0d"
+
+# Trace writer for the unprivileged live path: a second tshark on the same
+# monitor channel writing pcapng, converted to btsnoop when stopped.
+UNPRIV_TRACE_PID=""
+UNPRIV_TRACE_PCAP=""
+
+start_unprivileged_trace() {
+  local btsnoop="$1"
+  UNPRIV_TRACE_PCAP="${btsnoop%.btsnoop}.pcapng"
+  tshark -i bluetooth-monitor -q -w "${UNPRIV_TRACE_PCAP}" >/dev/null 2>&1 &
+  UNPRIV_TRACE_PID=$!
+}
+
+stop_unprivileged_trace() {
+  local btsnoop="$1"
+  if [[ -n "${UNPRIV_TRACE_PID}" ]]; then
+    # TERM, not INT: a job started in the background from a non-interactive
+    # shell has INT ignored, and tshark finalises the file on TERM as well.
+    kill "${UNPRIV_TRACE_PID}" 2>/dev/null || true
+    wait "${UNPRIV_TRACE_PID}" 2>/dev/null || true
+    UNPRIV_TRACE_PID=""
+  fi
+  if [[ -n "${UNPRIV_TRACE_PCAP}" && -s "${UNPRIV_TRACE_PCAP}" ]]; then
+    if editcap -F btsnoop "${UNPRIV_TRACE_PCAP}" "${btsnoop}" 2>/dev/null; then
+      rm -f "${UNPRIV_TRACE_PCAP}"
+    else
+      echo "note: trace kept as pcapng at ${UNPRIV_TRACE_PCAP} (editcap could not convert it)." >&2
+    fi
+  fi
+  UNPRIV_TRACE_PCAP=""
+}
+
+run_live_pipeline() {
+  local iface="$1"
+  local duration="$2"
+  local trace="$3"
+  local obs_out="$4"
+  shift 4
+
+  local observe_args=()
+  local alert_args=()
+  local phase=0
+  while (( $# )); do
+    if [[ "$1" == "--" ]]; then
+      phase=1
+      shift
+      continue
+    fi
+    if (( phase == 0 )); then
+      observe_args+=("$1")
+    else
+      alert_args+=("$1")
+    fi
+    shift
+  done
+
+  local cmd=()
+  if (( duration > 0 )); then
+    cmd+=(timeout "${duration}")
+  fi
+  local format="btmon"
+  if [[ "${CAPTURE_MODE}" == "unprivileged" ]]; then
+    # Without root, tshark streams the same advertising reports as fields,
+    # one line per report (-l flushes per packet). A live tshark refuses a
+    # display filter together with -w, so the trace is not written here;
+    # the caller runs a second tshark for it (start_unprivileged_trace).
+    format="tshark"
+    cmd+=(tshark -i bluetooth-monitor -l -Y "${BLE_TSHARK_FILTER}" -T fields "${BLE_TSHARK_FIELDS[@]}"
+          -E separator=/t -E occurrence=a -E 'aggregator=,')
+  else
+    cmd+=(stdbuf -oL btmon -i "${iface}")
+    if [[ -n "${trace}" ]]; then
+      cmd+=(-w "${trace}")
+    fi
+  fi
+
+  local rc=0
+  "${cmd[@]}" 2>/dev/null \
+    | python3 "${ROOT_DIR}/scripts/ble-observe.py" --stream --format "${format}" "${observe_args[@]}" \
+    | tee "${obs_out}" \
+    | python3 "${ROOT_DIR}/scripts/ble-live-alert.py" "${alert_args[@]}" || rc=$?
+
+  case "${rc}" in
+    0|124|130|143)
+      # 0 = clean exit, 124 = timeout reached, 130 = Ctrl+C, 143 = SIGTERM.
+      :
+      ;;
+    *)
+      echo "warn: live pipeline on ${iface} exited with status ${rc}." >&2
+      echo "warn: results may be incomplete. See TROUBLESHOOTING.md." >&2
+      ;;
+  esac
+
+  return 0
+}
+
+# --- Wi-Fi monitor mode -----------------------------------------------------------
+#
+# Passive only. Monitor mode listens; nothing below transmits. The interface
+# state is recorded so it can be put back the way it was found: managed
+# mode, and returned to NetworkManager if NetworkManager had it.
+#
+# tshark field list. Keep in step with scripts/wifi_parse.py FIELDS.
+WIFI_TSHARK_FIELDS=(
+  -e frame.time_epoch
+  -e wlan.fc.type_subtype
+  -e wlan.sa
+  -e wlan.da
+  -e wlan.bssid
+  -e wlan.ssid
+  -e wlan_radio.signal_dbm
+  -e wlan_radio.channel
+  -e wlan.fixed.reason_code
+  -e wlan.tag.number
+  -e wlan.supported_rates
+  -e wlan.ht.capabilities
+  -e wlan.tag.oui
+)
+# Every occurrence, comma-joined: the last four fields are lists.
+WIFI_TSHARK_FIELD_OPTS=(-E separator=/t -E occurrence=a -E 'aggregator=,')
+# Management frames only (type 0); data frames carry people's traffic and the
+# detector does not need them.
+WIFI_TSHARK_FILTER="wlan.fc.type == 0"
+
+WIFI_NM_MANAGED=""
+CHANNEL_HOP_PID=""
+
+wifi_monitor_on() {
+  local iface="$1"
+  WIFI_NM_MANAGED=""
+  if command -v nmcli >/dev/null 2>&1; then
+    if nmcli -t -f GENERAL.STATE device show "${iface}" >/dev/null 2>&1; then
+      WIFI_NM_MANAGED="yes"
+      nmcli device set "${iface}" managed no >/dev/null 2>&1 || true
+    fi
+  fi
+  ip link set "${iface}" down 2>/dev/null || true
+  if ! iw dev "${iface}" set type monitor 2>/dev/null; then
+    echo "warn: could not put ${iface} into monitor mode; the adapter or driver may not support it." >&2
+    echo "warn: see TROUBLESHOOTING.md (Wi-Fi monitor mode)." >&2
+  fi
+  ip link set "${iface}" up 2>/dev/null || true
+}
+
+wifi_monitor_off() {
+  local iface="$1"
+  ip link set "${iface}" down 2>/dev/null || true
+  iw dev "${iface}" set type managed 2>/dev/null || true
+  ip link set "${iface}" up 2>/dev/null || true
+  if [[ "${WIFI_NM_MANAGED}" == "yes" ]] && command -v nmcli >/dev/null 2>&1; then
+    nmcli device set "${iface}" managed yes >/dev/null 2>&1 || true
+  fi
+  WIFI_NM_MANAGED=""
+}
+
+# Hop the interface across channels in the background. A single channel sees
+# one sixth of the 2.4 GHz floor; hopping trades per-channel completeness for
+# coverage, which is the right trade for detection.
+start_channel_hop() {
+  local iface="$1"
+  local channels="${2:-1 6 11}"
+  local dwell_ms="${3:-250}"
+  local dwell
+  dwell="$(awk -v ms="${dwell_ms}" 'BEGIN { printf "%.3f", ms / 1000 }')"
+  (
+    while :; do
+      for ch in ${channels}; do
+        iw dev "${iface}" set channel "${ch}" >/dev/null 2>&1 || true
+        sleep "${dwell}"
+      done
+    done
+  ) &
+  CHANNEL_HOP_PID=$!
+}
+
+stop_channel_hop() {
+  [[ -n "${CHANNEL_HOP_PID}" ]] || return 0
+  kill "${CHANNEL_HOP_PID}" 2>/dev/null || true
+  wait "${CHANNEL_HOP_PID}" 2>/dev/null || true
+  CHANNEL_HOP_PID=""
+}
+
+# Field extract from a saved capture, in the detector's format.
+wifi_fields_from_pcap() {
+  local pcap="$1"
+  tshark -r "${pcap}" -Y "${WIFI_TSHARK_FILTER}" -T fields "${WIFI_TSHARK_FIELDS[@]}" \
+    "${WIFI_TSHARK_FIELD_OPTS[@]}" 2>/dev/null
+}
+
+# Live pipeline: tshark -> wifi-observe.py --stream -> wifi-live-alert.py.
+# Usage: run_wifi_live_pipeline <iface> <duration> <obs_out> [observe args...] -- [alert args...]
+run_wifi_live_pipeline() {
+  local iface="$1"
+  local duration="$2"
+  local obs_out="$3"
+  shift 3
+
+  local observe_args=()
+  local alert_args=()
+  local phase=0
+  while (( $# )); do
+    if [[ "$1" == "--" ]]; then
+      phase=1
+      shift
+      continue
+    fi
+    if (( phase == 0 )); then
+      observe_args+=("$1")
+    else
+      alert_args+=("$1")
+    fi
+    shift
+  done
+
+  local cmd=()
+  if (( duration > 0 )); then
+    cmd+=(timeout "${duration}")
+  fi
+  # -l flushes per packet, the tshark equivalent of stdbuf -oL.
+  cmd+=(tshark -i "${iface}" -l -Y "${WIFI_TSHARK_FILTER}" -T fields "${WIFI_TSHARK_FIELDS[@]}"
+        "${WIFI_TSHARK_FIELD_OPTS[@]}")
+
+  local rc=0
+  "${cmd[@]}" 2>/dev/null \
+    | python3 "${ROOT_DIR}/scripts/wifi-observe.py" --stream "${observe_args[@]}" \
+    | tee "${obs_out}" \
+    | python3 "${ROOT_DIR}/scripts/wifi-live-alert.py" "${alert_args[@]}" || rc=$?
+
+  case "${rc}" in
+    0|124|130|143) ;;
+    *)
+      echo "warn: Wi-Fi live pipeline on ${iface} exited with status ${rc}." >&2
+      ;;
+  esac
+  return 0
 }

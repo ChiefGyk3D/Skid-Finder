@@ -8,7 +8,10 @@ fi
 
 # Keep this list in step with scripts/setup-pi.sh.
 REQUIRED=(bluez python3 rfkill tmux)
-OPTIONAL=(bluez-tools wireless-tools iw tshark)
+# iw and tshark are what the Wi-Fi capture needs; they stay optional so a
+# BLE-only host installs without them, and the Wi-Fi scripts say what is
+# missing when run.
+OPTIONAL=(bluez-tools wireless-tools iw tshark whiptail)
 
 if ! command -v apt >/dev/null 2>&1; then
   echo "This installer currently supports apt-based Debian/Ubuntu systems." >&2

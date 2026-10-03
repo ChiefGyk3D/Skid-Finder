@@ -99,11 +99,15 @@ except OSError as exc:
   echo
 
   check_file "README.md"
+  check_file "VERSION"
+  check_file "CHANGELOG.md"
+  check_file "docs/ROADMAP.md"
   check_file "TROUBLESHOOTING.md"
   check_file "LICENSE"
   check_file "config/interfaces.conf.example"
   check_file "config/aio-features.conf.example"
   check_file "config/signatures.conf.example"
+  check_file "config/wifi-signatures.conf.example"
   check_optional_file "config/interfaces.conf" "copy from config/interfaces.conf.example"
   check_optional_file "config/signatures.conf" "copy from config/signatures.conf.example"
   check_file "tests/test-ble-signature-tuning.sh"
@@ -112,7 +116,26 @@ except OSError as exc:
   check_file "tests/test-capture-resilience.sh"
   check_file "tests/test-le-scan-enable.sh"
   check_file "tests/test-config-parsing.sh"
+  check_file "tests/test-field-menu.sh"
+  check_file "tests/test-versioning.sh"
+  check_file "tests/test-unprivileged-capture.sh"
+  check_file "tests/test-systemd-units.sh"
+  check_file "tests/test-evidence-bundle.sh"
+  check_file "systemd/skid-finder-sensor@.service"
+  check_file "systemd/skid-finder-collector.service"
+  check_file "systemd/skid-finder-retention.timer"
+  check_file "tests/test-sensor-net.sh"
+  check_file "tests/make-fleet-fixture.py"
+  check_file "tests/test-wifi-signatures.sh"
+  check_file "tests/test-wifi-fingerprint.sh"
+  check_file "tests/test-wifi-live-watch.sh"
+  check_file "tests/make-wifi-fixture.py"
+  check_file "tests/corpus/wifi-manifest.jsonl"
   check_file "tests/make-fixture.py"
+  check_file "tests/test-detector-metrics.py"
+  check_file "tests/test-ble-observe.sh"
+  check_file "tests/test-ble-live-watch.sh"
+  check_file "tests/corpus/manifest.jsonl"
   check_file "tests/test-toolkit.sh"
 
   for script in \
@@ -120,8 +143,27 @@ except OSError as exc:
     scripts/detect-hci.sh \
     scripts/setup-linux.sh \
     scripts/ble_parse.py \
+    scripts/ble_identity.py \
+    scripts/ble_signatures.py \
     scripts/ble-fingerprint.py \
     scripts/ble-signature-scan.py \
+    scripts/ble-observe.py \
+    scripts/ble-live-alert.py \
+    scripts/live_window.py \
+    scripts/ble-live-watch.sh \
+    scripts/ble-publish.py \
+    scripts/ble-collector.py \
+    scripts/skid_conf.py \
+    scripts/sig_config.py \
+    scripts/wifi_parse.py \
+    scripts/wifi_signatures.py \
+    scripts/wifi-observe.py \
+    scripts/wifi_identity.py \
+    scripts/wifi-fingerprint.py \
+    scripts/wifi-signature-scan.py \
+    scripts/wifi-live-alert.py \
+    scripts/wifi-capture.sh \
+    scripts/wifi-live-watch.sh \
     scripts/ble-spam-watch.sh \
     scripts/capture-btmon.sh \
     scripts/foxhunt-rssi.sh \
@@ -129,11 +171,19 @@ except OSError as exc:
     scripts/ble-field-run.sh \
     scripts/aio-feature-profile.sh \
     scripts/set-adapter-mode.sh \
+    scripts/retention-sweep.sh \
+    scripts/evidence-bundle.sh \
+    scripts/add-corpus-sample.sh \
+    scripts/skid-finder.sh \
     scripts/troubleshoot-bluetooth.sh \
     scripts/diagnose-mediatek-ac1200.sh \
     scripts/validate-toolkit.sh; do
     check_shell_syntax "${script}"
   done
+
+  check_shell_syntax "tests/test-detector-metrics.py"
+  check_shell_syntax "tests/make-fleet-fixture.py"
+  check_shell_syntax "tests/make-wifi-fixture.py"
 
   if command -v python3 >/dev/null 2>&1; then
     record_pass "python3 available"
@@ -155,6 +205,16 @@ except OSError as exc:
     fi
   else
     record_warn "shellcheck not installed; static analysis skipped"
+  fi
+
+  if command -v ruff >/dev/null 2>&1; then
+    if ruff check "${ROOT_DIR}"/scripts/*.py "${ROOT_DIR}"/tests/*.py >/dev/null 2>&1; then
+      record_pass "ruff clean (ruff.toml ruleset)"
+    else
+      record_warn "ruff findings in Python (run: ruff check scripts/*.py tests/*.py)"
+    fi
+  else
+    record_warn "ruff not installed; Python static analysis skipped"
   fi
 
   echo
