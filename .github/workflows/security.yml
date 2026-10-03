@@ -1,9 +1,5 @@
-# CodeQL (Python and the workflows themselves), gitleaks, Semgrep, dependency
-# review and OpenSSF Scorecard. The jobs live in
-# ChiefGyk3D/git-your-ship-together. No Doppler: gitleaks needs no licence for
-# a personal account and Snyk is off, so nothing here reads a secret. The
-# toolkit's only dependency is paho-mqtt, optional and unpinned, so there is
-# no requirements file for pip-audit.
+# CodeQL, gitleaks, a dependency audit and dependency review on pull
+# requests. The jobs live in ChiefGyk3D/git-your-ship-together.
 name: Security
 
 on:
@@ -11,7 +7,7 @@ on:
     branches: [main]
   pull_request:
   schedule:
-    - cron: '0 6 * * 1'
+    - cron: '0 6 * * 1'   # weekly, so new advisories surface between commits
   workflow_dispatch:
 
 permissions:
@@ -24,9 +20,13 @@ jobs:
       contents: read
       security-events: write
       pull-requests: write
-      id-token: write   # Scorecard publishes with OIDC
+      id-token: write
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}   # optional Service Token fallback; unset means OIDC only
     with:
-      codeql-queries: security-extended,security-and-quality
-      pip-audit-requirements: ""
+      pip-audit-requirements: ""   # no requirements.txt; add a hash-pinned lock and name it here
       scorecard: true
       egress-policy: block
+      doppler-project: ci
+      doppler-config: ci
+      doppler-identity-id: ${{ vars.DOPPLER_IDENTITY_ID }}

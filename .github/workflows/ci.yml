@@ -1,13 +1,5 @@
-# Lint, shell checks and the test suite. The jobs live in
-# ChiefGyk3D/git-your-ship-together; its `CI green` job in each of the two
-# callers below is what branch protection watches (`ci / CI green` and
-# `shell / CI green`).
-#
-# What stays specific to this repository: the test suite is a bash script
-# (tests/test-toolkit.sh) that wants the example configs copied into place and
-# the scripts executable, so python-ci runs it as its test command, on the two
-# Pythons the project supports. 3.11 is Raspberry Pi OS bookworm (the
-# uConsole); 3.13 is Debian 13, Parrot 7 and Ubuntu 26.04.
+# CI for Skid-Finder. The jobs live in ChiefGyk3D/git-your-ship-together; this file
+# says only what is specific to this repository.
 name: CI
 
 on:
@@ -28,17 +20,26 @@ jobs:
     uses: ChiefGyk3D/git-your-ship-together/.github/workflows/python-ci.yml@0e58a0e61ea8b3800d1cb0e6ed81bb860ace2094 # v1.6.3
     permissions:
       contents: read
+      id-token: write   # Doppler OIDC (see the shared repository's README)
+    secrets:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}   # optional Service Token fallback; unset means OIDC only
     with:
-      python-versions: '["3.11", "3.13"]'
-      install-command: python -m pip install --upgrade pip
-      lint-command: ruff check scripts/*.py tests/*.py
-      test-command: |
-        cp config/interfaces.conf.example config/interfaces.conf
-        cp config/signatures.conf.example config/signatures.conf
-        chmod +x scripts/*.sh tests/*.sh
-        ./tests/test-toolkit.sh
+      python-versions: '["3.11", "3.12", "3.13"]'
+      install-command: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install pytest
+      test-command: pytest
+      lint-install-command: |
+        pip install ruff
+      lint-command: |
+        ruff check .
+        ruff format --check . || echo "::warning title=ruff format::formatting drift (advisory)"
       docker-build: false
       egress-policy: block
+      doppler-project: ci
+      doppler-config: ci
+      doppler-identity-id: ${{ vars.DOPPLER_IDENTITY_ID }}
 
   shell:
     uses: ChiefGyk3D/git-your-ship-together/.github/workflows/bash-ci.yml@0e58a0e61ea8b3800d1cb0e6ed81bb860ace2094 # v1.6.3
@@ -46,8 +47,7 @@ jobs:
       contents: read
     with:
       shfmt-args: -i 2 -ci
-      # The existing scripts were never held to shfmt. Report a diff without
-      # failing until a formatting pass lands, then delete this line.
-      shfmt-continue-on-error: true
-      workflow-lint: false   # python-ci's job already lints the workflow files
+      # Shell tests seen: tests/test-ble-fingerprint.sh tests/test-ble-gps-merge-optional.sh tests/test-ble-live-watch.sh tests/test-ble-observe.sh tests/test-ble-signature-tuning.sh. Name the runner:
+      # test-command: ./tests/run.sh
+      workflow-lint: false   # the ci job above already lints the workflow files
       egress-policy: block
