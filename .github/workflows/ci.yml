@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   ci:
-    uses: ChiefGyk3D/git-your-ship-together/.github/workflows/python-ci.yml@804400181a9d3e2f78dfcda5161e2bd960bc011a # v1.15.0
+    uses: ChiefGyk3D/git-your-ship-together/.github/workflows/python-ci.yml@1360d100a45897b2d658272441bc5238d6532743 # v1.16.0
     permissions:
       contents: read
       id-token: write   # python-ci's coverage job asks for it, and GitHub refuses to start the workflow without it; nothing here uses Doppler or Codecov
@@ -48,7 +48,7 @@ jobs:
       egress-policy: block
 
   shell:
-    uses: ChiefGyk3D/git-your-ship-together/.github/workflows/bash-ci.yml@804400181a9d3e2f78dfcda5161e2bd960bc011a # v1.15.0
+    uses: ChiefGyk3D/git-your-ship-together/.github/workflows/bash-ci.yml@1360d100a45897b2d658272441bc5238d6532743 # v1.16.0
     permissions:
       contents: read
     with:
@@ -66,7 +66,7 @@ jobs:
   # test-command, no distros and no runners to choose: arduino-ci compiles on
   # one Ubuntu runner and keeps the binary as an artifact.
   firmware:
-    uses: ChiefGyk3D/git-your-ship-together/.github/workflows/arduino-ci.yml@804400181a9d3e2f78dfcda5161e2bd960bc011a # v1.15.0
+    uses: ChiefGyk3D/git-your-ship-together/.github/workflows/arduino-ci.yml@1360d100a45897b2d658272441bc5238d6532743 # v1.16.0
     permissions:
       contents: read
     with:
