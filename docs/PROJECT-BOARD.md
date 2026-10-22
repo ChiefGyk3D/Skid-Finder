@@ -1,7 +1,7 @@
 # The project board
 
 Every piece of Skid Finder work, shipped or planned, is a card on one
-GitHub Project: [Skid Finder](https://github.com/users/ChiefGyk3D/projects/TBD).
+GitHub Project: [Skid Finder](https://github.com/users/ChiefGyk3D/projects/8).
 The board is defined as code in [`board.yaml`](../board.yaml) for
 [Scrum Around and Find Out](https://github.com/ChiefGyk3D/scrum-around-and-find-out)
 (SAFO), and is laid out like the board of the Hammunition suite so one

@@ -7,7 +7,7 @@ version: 1
 project:
   owner: ChiefGyk3D
   owner_type: user
-  number: 9999  # TBD: PLACEHOLDER that matches no real project; set the project number after `gh project create`, before any reconcile
+  number: 8  # TBD: PLACEHOLDER that matches no real project; set the project number after `gh project create`, before any reconcile
   title: Skid Finder
 repositories:
   - owner: ChiefGyk3D
