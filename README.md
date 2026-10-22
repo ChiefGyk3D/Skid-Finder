@@ -54,6 +54,10 @@ stage definitions, the milestone table and the release procedure are in
 [docs/ROADMAP.md](docs/ROADMAP.md), and `tests/test-versioning.sh` fails
 the build if this section, `VERSION` and the changelog disagree.
 
+All planned work, shipped and upcoming, is tracked on the project board; see
+[docs/PROJECT-BOARD.md](docs/PROJECT-BOARD.md) for the fields, the views and the
+rules.
+
 ## Quick start on a laptop or desktop
 
 Any Linux machine with a BlueZ-visible Bluetooth adapter can run the BLE
