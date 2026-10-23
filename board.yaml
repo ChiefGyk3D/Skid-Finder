@@ -1,0 +1,155 @@
+# SPDX-License-Identifier: Apache-2.0
+# The project board for this repository, defined as code for Scrum Around and Find Out (SAFO).
+# A user-owned GitHub Project: no App can write one, so it is kept current from the maintainer's own
+# `gh` login with `safo --board board.yaml reconcile` (no token is stored in CI).
+# How the board is used: docs/PROJECT-BOARD.md
+version: 1
+project:
+  owner: ChiefGyk3D
+  owner_type: user
+  number: 8
+  title: Skid Finder
+repositories:
+  - owner: ChiefGyk3D
+    name: Skid-Finder
+    default_area: Detector
+    area_rules:
+      - {match: wifi, area: "Wi-Fi"}
+      - {match: wi-fi, area: "Wi-Fi"}
+      - {match: deauth, area: "Wi-Fi"}
+      - {match: ble, area: "BLE"}
+      - {match: bluetooth, area: "BLE"}
+      - {match: collector, area: "Sensor net and collector"}
+      - {match: mqtt, area: "Sensor net and collector"}
+      - {match: esp32, area: "Sensor net and collector"}
+      - {match: siem, area: "Sensor net and collector"}
+      - {match: uconsole, area: "Hardware and field"}
+      - {match: hardware, area: "Hardware and field"}
+      - {match: lora, area: "Other radios"}
+      - {match: meshtastic, area: "Other radios"}
+      - {match: security, area: "Security"}
+      - {match: scorecard, area: "Security"}
+      - {match: codeql, area: "Security"}
+      - {match: documentation, area: "Docs"}
+      - {match: docs, area: "Docs"}
+      - {match: readme, area: "Docs"}
+      - {match: roadmap, area: "Docs"}
+      - {match: release, area: "CI and release"}
+      - {match: workflow, area: "CI and release"}
+      - {match: tagging, area: "CI and release"}
+      - {match: board, area: "Process"}
+      - {match: process, area: "Process"}
+fields:
+  - name: Status
+    type: single_select
+    options:
+      - {name: Backlog, color: GRAY, description: "Not scheduled"}
+      - {name: Next, color: BLUE, description: "Scheduled for a sprint"}
+      - {name: In progress, color: YELLOW, description: "Being worked, or a draft pull request"}
+      - {name: In review, color: PURPLE, description: "Pull request open, checks and reviews running"}
+      - {name: Blocked, color: RED, description: "Needs the maintainer, the hardware or an outside answer"}
+      - {name: Done, color: GREEN, description: "Closed or merged"}
+  - name: Area
+    type: single_select
+    options:
+      - {name: Detector, color: ORANGE, description: "Signatures, fingerprints, the precision/recall gate, shared record shapes"}
+      - {name: BLE, color: BLUE, description: "BLE capture, observation, live alerting, foxhunt"}
+      - {name: Wi-Fi, color: GREEN, description: "Passive Wi-Fi capture, detectors, fingerprinting"}
+      - {name: Sensor net and collector, color: PURPLE, description: "Nodes, MQTT, collector, incidents, SIEM, fleet operation"}
+      - {name: Other radios, color: PINK, description: "LoRa, Meshtastic, 802.15.4, sub-GHz, GNSS, spectrum"}
+      - {name: Hardware and field, color: RED, description: "Needs the uConsole, AIO v2, AC1200, a Flipper or an event"}
+      - {name: Docs, color: BLUE, description: "README, roadmap and notes: reading, not building"}
+      - {name: CI and release, color: GRAY, description: "Workflows, tagging, releases, the Hammunition pin"}
+      - {name: Security, color: RED, description: "Scanner alerts, threat models, data handling, advisories"}
+      - {name: Process, color: YELLOW, description: "How the project is run: the board, the rules"}
+  - name: Effort
+    type: single_select
+    options:
+      - {name: S, color: GRAY, description: "About 2 hours"}
+      - {name: M, color: BLUE, description: "About a day (5 hours of the maintainer's time)"}
+      - {name: L, color: ORANGE, description: "Days (about 12 hours)"}
+      - {name: XL, color: RED, description: "A week or more (about 30 hours): split before scheduling"}
+  - name: Kind
+    type: single_select
+    options:
+      - {name: Feature, color: GREEN, description: "New capability in the repository"}
+      - {name: Bug, color: RED, description: "Something is wrong"}
+      - {name: Decision, color: PURPLE, description: "A ruling, design note or approval"}
+      - {name: Bench, color: BLUE, description: "Hardware measurement or field run; produces a capture and a finding"}
+      - {name: Chore, color: GRAY, description: "Upkeep, dependency bump, alert triage"}
+      - {name: Docs, color: YELLOW, description: "Documentation"}
+      - {name: Release, color: ORANGE, description: "A tag and a GitHub release"}
+      - {name: Epic, color: PINK, description: "A grouping issue; its work is in sub-issues"}
+  # One option per ROADMAP milestone. "Epic #N" is filled in once the epic issue exists.
+  - name: Epic
+    type: single_select
+    options:
+      - {name: v0.1 Single-node detector, color: GRAY, description: "Milestone 1 (closed), shipped 0.1.0-alpha.1"}
+      - {name: v0.2 Sensor net, color: GRAY, description: "Milestone 2 (closed), shipped 0.2.0-alpha.1"}
+      - {name: v0.3 Wi-Fi, color: GRAY, description: "Milestone 3 (closed), shipped 0.3.0-alpha.1"}
+      - {name: v0.9 Beta on hardware, color: RED, description: "Milestone 4; tracker issue #1"}
+      - {name: v1.0 Field-proven, color: ORANGE, description: "Milestone 5"}
+      - {name: Post-1.0 Wi-Fi parity, color: GREEN, description: "Milestone 6; issue #18"}
+      - {name: Post-1.0 LoRa and Meshtastic, color: PINK, description: "Milestone 7; issue #15"}
+      - {name: Post-1.0 Other radios, color: PURPLE, description: "Milestone 8; issue #16"}
+      - {name: Post-1.0 Enterprise defense, color: BLUE, description: "Milestone 9; issue #17"}
+      - {name: Process and security, color: YELLOW, description: "The board, CI, scanner alerts; no milestone"}
+  - {name: Decision, type: text}
+  - name: Priority
+    type: single_select
+    options:
+      - {name: P0 now, color: RED, description: "Drop everything"}
+      - {name: P1 soon, color: ORANGE, description: ""}
+      - {name: P2 later, color: YELLOW, description: ""}
+      - {name: P3 someday, color: GRAY, description: ""}
+  - name: Agent
+    type: single_select
+    options:
+      - {name: Claude, color: ORANGE, description: "Claude lead or a Claude subagent"}
+      - {name: Codex, color: GREEN, description: "OpenAI Codex"}
+      - {name: Copilot, color: BLUE, description: "GitHub Copilot coding agent"}
+      - {name: ChatGPT, color: GREEN, description: "OpenAI ChatGPT: language, copy and prompt wording"}
+      - {name: Ollama, color: PINK, description: "Local model on the maintainer's server: triage, summaries, first drafts"}
+      - {name: RAG, color: GRAY, description: "Retrieval over the project's docs and issues, where it answers a question"}
+      - {name: You, color: PURPLE, description: "The maintainer"}
+  # To confirm: S1 is 2027-02-23, when Skid Finder resumes after the Hammunition 1.0 window.
+  - {name: Sprint, type: iteration, start: 2027-02-23, duration_days: 14, count: 8, title_prefix: "S"}
+  - {name: Start date, type: date}
+  - {name: Target date, type: date}
+  - {name: Done on, type: date}
+views:
+  - {name: All Items, layout: table, filter: ""}
+  - {name: Board, layout: board, filter: "-status:Done"}
+  - {name: Roadmap, layout: roadmap, filter: "-status:Done"}
+  - {name: Sprint, layout: board, filter: "sprint:@current"}
+  - {name: Sprint plan, layout: table, filter: "-status:Done"}
+  - {name: Epics, layout: table, filter: "kind:Epic"}
+  - {name: Bugs, layout: table, filter: "kind:Bug -status:Done"}
+  - {name: "Blocked: needs the maintainer", layout: table, filter: "status:Blocked"}
+  - {name: By area, layout: table, filter: "-status:Done"}
+  - {name: Security, layout: table, filter: 'area:Security -status:Done'}
+  - {name: Docs, layout: table, filter: 'area:Docs -status:Done'}
+  - {name: Done log, layout: table, filter: "status:Done"}
+  - {name: Agents at work, layout: table, filter: 'status:"In progress","In review",Next'}
+rules:
+  status:
+    opened: Backlog
+    opened_pr: In review
+    draft_pr: In progress
+    reopened: Backlog
+    closed: Done
+    merged: Done
+  done_date_field: Done on
+  new_item_defaults:
+    Priority: P2 later
+agents:
+  field: Agent
+  working: [In progress, In review, Next]
+  waiting: [Blocked]
+ui_only:
+  - "Board and Sprint views: Column field = Status, Sort by Priority"
+  - "Roadmap view: Date fields = Start date and Target date, Group by = Epic, zoom = Quarter"
+  - "Sprint plan view: Group by = Sprint; show Effort, Agent, Area, Kind"
+  - "By area view: Group by = Area. Agents at work view: Group by = Agent"
+  - "Epics view: show Epic, Start date, Target date. Blocked view: show Agent, Decision. Done log view: Sort by Done on, descending; show Kind, Epic"
+  - "Project workflows: Item closed -> Done; Pull request merged -> Done; Auto-add is not needed (reconcile adds)"

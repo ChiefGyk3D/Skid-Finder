@@ -19,6 +19,16 @@ fix with a test that would have caught it. Third is everything else.
 - **Tested, and falsifiable.** Every check in `tests/` was broken on
   purpose once to prove it goes red. Do the same for a new one.
 
+## Planning rules
+
+Work is tracked on the [project board](docs/PROJECT-BOARD.md), defined in
+`board.yaml`.
+
+- **An issue before work.** Open (or find) the issue first, with a reason
+  and a "done when" list. Roadmap items without an issue get one.
+- **A pull request links its issue** (`Closes #N` or `Refs #N`).
+- **An agent brief starts with `issue: ChiefGyk3D/Skid-Finder#N`.**
+
 ## Before you open a pull request
 
 ```bash
