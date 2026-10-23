@@ -55,6 +55,9 @@ These need the uConsole, the AC1200 radio and a Flipper Zero in a contained
 space. They are the same items draft PR #6 carried and are recorded here so
 they do not depend on a PR staying open.
 
+[bench-runbook.md](bench-runbook.md) orders them by shared setup so the
+whole list fits one or two sittings.
+
 - [ ] uConsole ambient baseline on the AC1200 recorded in the corpus and
       silent on every profile
 - [ ] Flipper Zero spam captured per mode (Apple, Fast Pair, SwiftPair,
