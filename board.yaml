@@ -30,6 +30,15 @@ repositories:
       - {match: security, area: "Security"}
       - {match: scorecard, area: "Security"}
       - {match: codeql, area: "Security"}
+      - {match: documentation, area: "Docs"}
+      - {match: docs, area: "Docs"}
+      - {match: readme, area: "Docs"}
+      - {match: roadmap, area: "Docs"}
+      - {match: release, area: "CI and release"}
+      - {match: workflow, area: "CI and release"}
+      - {match: tagging, area: "CI and release"}
+      - {match: board, area: "Process"}
+      - {match: process, area: "Process"}
 fields:
   - name: Status
     type: single_select
