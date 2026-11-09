@@ -9,6 +9,11 @@ would break.
 
 ## [Unreleased]
 
+### Added
+- `docs/bench-runbook.md`: the beta hardware checklist ordered by shared
+  setup, with the command, the pass condition and what to record for each
+  item (#105).
+
 ### Changed
 - CI and security scanning run through the reusable workflows in
   git-your-ship-together, pinned at v1.6.3: `python-ci` (ruff and the test
